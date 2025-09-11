@@ -1,0 +1,13 @@
+# --- Build-Ausgaben von .NET ---
+[Bb]in/
+[Oo]bj/
+
+# --- Rider/IntelliJ Projektdateien ---
+.idea/
+
+# --- User-spezifische Dateien ---
+*.user
+*.suo
+
+# --- macOS Systemdateien ---
+.DS_Store
