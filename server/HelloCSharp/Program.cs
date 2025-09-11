@@ -1,4 +1,4 @@
-using System;
+using Tools;
 
-Console.WriteLine("Demo läuft...");
-    
+var rechner = new Rechner();
+Console.WriteLine(rechner.Multiply(3, 4));
