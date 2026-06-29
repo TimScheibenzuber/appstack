@@ -50,6 +50,30 @@ Hugging Face and cached locally.
 
 ## Usage
 
+### Menu bar app (recommended)
+
+```bash
+source .venv/bin/activate
+python menubar.py
+```
+
+A 🎙️ icon appears in the macOS menu bar. It shows status (🔴 recording,
+⏳ transcribing) and offers a menu with:
+
+- **Start / Stop Dictation** — same as pressing the hotkey.
+- **History** — your recent transcriptions; click one to re-copy it; *Clear
+  History* to wipe it.
+- **Options** — toggle **Auto-paste (Cmd+V)** and **Restore clipboard**, and
+  pick the **Hotkey** (F7–F10).
+- **Start at Login** — installs/removes a macOS *LaunchAgent* so the app
+  launches automatically every time you log in.
+- **Quit voicetotext**.
+
+Settings persist in `~/.voicetotext/config.json` and history in
+`~/.voicetotext/history.json`.
+
+### CLI
+
 ```bash
 source .venv/bin/activate
 python main.py
@@ -95,6 +119,13 @@ you launch it from** (Terminal, iTerm, or VS Code's integrated terminal):
 After changing these, **fully quit and reopen** the terminal, then run again.
 The script prints targeted instructions if it detects a permission failure.
 
+> **Start at Login note:** the LaunchAgent runs the same `menubar.py` with the
+> same venv Python, inheriting these permissions. If the auto-started app can't
+> record or paste, it's the permission grant — re-grant for the app that
+> actually launches it. The agent is just a plist at
+> `~/Library/LaunchAgents/com.voicetotext.menubar.plist`; toggling *Start at
+> Login* off removes it.
+
 ---
 
 ## How it works
@@ -105,9 +136,25 @@ The script prints targeted instructions if it detects a permission failure.
 | Recording      | `sounddevice` input stream → in-memory float32 buffer (16 kHz mono)   |
 | Transcription  | `parakeet-mlx` log-mel front-end + `model.generate` (no disk writes)  |
 | Paste          | `pyperclip` clipboard + simulated `Cmd+V` via `pynput`                |
+| Menu bar UI    | `rumps`; cross-thread UI updates funneled to the main thread via a queue |
+| Start at login | macOS `LaunchAgent` plist + `launchctl`                               |
 
-Heavy transcription runs on a worker thread so the hotkey stays responsive,
-and a temp-WAV fallback covers any version drift in the in-memory model API.
+Heavy transcription runs on a worker thread so the hotkey/menu stay
+responsive, and a temp-WAV fallback covers any version drift in the in-memory
+model API.
+
+### Project layout
+
+```
+voicetotext/
+├── core.py          # shared engine: audio, transcription, clipboard, config,
+│                    #   history, LaunchAgent helpers (no UI deps)
+├── main.py          # CLI front-end (background dictation in the terminal)
+├── menubar.py       # macOS menu bar app (icon, options, history, auto-start)
+├── requirements.txt # deps (MLX/rumps guarded to macOS/Apple Silicon)
+├── run.sh           # convenience launcher for the CLI
+└── README.md
+```
 
 ---
 
