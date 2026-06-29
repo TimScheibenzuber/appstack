@@ -1,0 +1,21 @@
+# ---------------------------------------------------------------------------
+# voicetotext dependencies
+#
+# Apple Silicon (M-series) is REQUIRED for the speech model. The MLX runtime
+# and parakeet-mlx only build/run on macOS arm64, so they are guarded with
+# environment markers. On any other platform pip/uv will simply skip them,
+# which lets the cross-platform pieces (audio, clipboard, hotkeys) still
+# install for development/linting.
+# ---------------------------------------------------------------------------
+
+# --- Speech model: NVIDIA Parakeet on Apple Silicon via MLX (macOS arm64 only)
+mlx>=0.19.0 ; sys_platform == "darwin" and platform_machine == "arm64"
+parakeet-mlx>=0.3.0 ; sys_platform == "darwin" and platform_machine == "arm64"
+
+# --- Audio capture (cross-platform; uses CoreAudio on macOS)
+sounddevice>=0.4.6
+numpy>=1.26,<3
+
+# --- Clipboard + global hotkey + keystroke simulation
+pyperclip>=1.8.2
+pynput>=1.7.6
