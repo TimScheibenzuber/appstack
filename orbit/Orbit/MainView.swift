@@ -51,13 +51,18 @@ struct MainView: View {
     }
 
     private var inspectorBinding: Binding<Bool> {
-        Binding(get: { showInspector && store.selected != nil }, set: { shown in
+        Binding(get: { showInspector && store.selected != nil && !focusingText }, set: { shown in
             #if os(macOS)
             showInspector = shown
             #else
             if !shown { store.selection = [] }
             #endif
         })
+    }
+
+    /// Focus mode on a note or chat already shows the full editor.
+    private var focusingText: Bool {
+        store.focused.flatMap { store.items[$0]?.kind }.map { $0 != .mindmap } ?? false
     }
 
     @ToolbarContentBuilder private var toolbar: some ToolbarContent {

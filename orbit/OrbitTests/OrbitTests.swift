@@ -27,6 +27,7 @@ struct VaultTests {
         defer { try? FileManager.default.removeItem(at: dir) }
         _ = try Vault.create(at: dir, password: "correct horse", rounds: 1_000)
         #expect(throws: VaultError.self) { try Vault.open(at: dir, password: "wrong horse") }
+        #expect(throws: VaultError.self) { try Vault.create(at: dir, password: "overwrite", rounds: 1_000) }
         #expect(throws: (any Error).self) { try Vault.open(at: dir, key: Data(repeating: 7, count: 32)) }
     }
 

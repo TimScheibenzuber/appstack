@@ -103,7 +103,7 @@ final class Store {
         manualLock = manual
         saveTask?.cancel()
         for id in pending {
-            if let item = items[id] { try? vault.save(item) } else { vault.delete(id) }
+            if let item = items[id] { _ = try? vault.save(item) } else { vault.delete(id) }
         }
         pending = []
         watcher?.cancel()
@@ -453,7 +453,8 @@ final class Store {
             if !quiet && !AI.isAvailable { notify("Apple Intelligence is off. Added keyword tags instead.") }
         }
         modify([id]) { i in
-            if i.title.isEmpty || i.kind == .chat || i.kind == .file { i.title = title.isEmpty ? i.title : title }
+            let fileStem = i.file.map { ($0.name as NSString).deletingPathExtension }
+            if (i.title.isEmpty || i.title == fileStem) && !title.isEmpty { i.title = title }
             if !summary.isEmpty { i.summary = summary }
             let normalized = tags.map { $0.lowercased().trimmingCharacters(in: .whitespaces) }.filter { !$0.isEmpty }
             i.tags = Array((i.tags + normalized.filter { !i.tags.contains($0) }).prefix(6))

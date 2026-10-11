@@ -55,7 +55,9 @@ struct LockView: View {
 
     private var setup: some View {
         VStack(spacing: 12) {
-            Button { draft = VaultLocation.local } label: {
+            Button {
+                if Vault.exists(at: VaultLocation.local) { store.choose(VaultLocation.local) } else { draft = VaultLocation.local }
+            } label: {
                 Label("Create Vault on This Device", systemImage: "lock.shield").frame(maxWidth: .infinity)
             }
             .buttonStyle(.glassProminent)
@@ -127,7 +129,8 @@ struct LockView: View {
         } else if mode == .open {
             fail(VaultError.notAVault.localizedDescription)
         } else {
-            draft = url.appending(path: "Orbit Vault", directoryHint: .isDirectory)
+            let folder = url.appending(path: "Orbit Vault", directoryHint: .isDirectory)
+            if Vault.exists(at: folder) { store.choose(folder) } else { draft = folder }
         }
     }
 

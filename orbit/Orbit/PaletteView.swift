@@ -29,6 +29,9 @@ struct PaletteView: View {
                         .font(.title3)
                         .focused($focused)
                         .onSubmit { run(entries, index) }
+                        .onKeyPress(.downArrow) { index = min(index + 1, max(entries.count - 1, 0)); return .handled }
+                        .onKeyPress(.upArrow) { index = max(index - 1, 0); return .handled }
+                        .onKeyPress(.escape) { close(); return .handled }
                     Text("esc").font(.caption.monospaced()).foregroundStyle(.tertiary)
                 }
                 .padding(18)
@@ -54,9 +57,6 @@ struct PaletteView: View {
             .shadow(color: .black.opacity(0.25), radius: 40, y: 24)
             .padding(.top, 80)
             .padding(.horizontal, 16)
-            .onKeyPress(.downArrow) { index = min(index + 1, max(entries.count - 1, 0)); return .handled }
-            .onKeyPress(.upArrow) { index = max(index - 1, 0); return .handled }
-            .onKeyPress(.escape) { close(); return .handled }
         }
         .onAppear { focused = true }
         .onChange(of: text) { index = 0 }

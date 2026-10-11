@@ -4,12 +4,13 @@ import CommonCrypto
 import LocalAuthentication
 
 enum VaultError: LocalizedError {
-    case wrongPassword, notAVault
+    case wrongPassword, notAVault, alreadyExists
 
     var errorDescription: String? {
         switch self {
         case .wrongPassword: "Wrong passphrase."
         case .notAVault: "This folder is not an Orbit vault."
+        case .alreadyExists: "This folder already contains a vault."
         }
     }
 }
@@ -53,6 +54,7 @@ final class Vault: Sendable {
     // MARK: Lifecycle
 
     static func create(at root: URL, password: String, rounds: Int = 600_000) throws -> Vault {
+        guard !exists(at: root) else { throw VaultError.alreadyExists }
         let master = SymmetricKey(size: .bits256)
         let salt = Data(SymmetricKey(size: .bits128).withUnsafeBytes { Array($0) })
         let wrapped = try seal(master.withUnsafeBytes { Data($0) }, derive(password, salt: salt, rounds: rounds))

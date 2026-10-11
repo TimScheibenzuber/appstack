@@ -242,7 +242,7 @@ struct MindmapView: View {
         var grew = true
         while grew {
             grew = false
-            for n in nodes where !doomed.contains(n.id) && n.parent.map { doomed.contains($0) } == true {
+            for n in nodes where !doomed.contains(n.id) && n.parent.map({ doomed.contains($0) }) == true {
                 doomed.insert(n.id)
                 grew = true
             }

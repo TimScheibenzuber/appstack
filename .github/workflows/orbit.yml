@@ -23,7 +23,12 @@ jobs:
       - name: Toolchain
         run: xcodebuild -version && swift --version
       - name: Test (macOS)
-        run: xcodebuild test -project Orbit.xcodeproj -scheme Orbit -destination 'platform=macOS,arch=arm64' CODE_SIGNING_ALLOWED=NO -quiet
+        run: |
+          set +e
+          xcodebuild test -project Orbit.xcodeproj -scheme Orbit -destination 'platform=macOS,arch=arm64' CODE_SIGNING_ALLOWED=NO > test.log 2>&1
+          status=$?
+          grep -E "error:|warning: |✔ Test|✘|Test run with|TEST (SUCCEEDED|FAILED)" test.log
+          exit $status
       - name: Build (iOS Simulator)
         if: always()
         run: xcodebuild build -project Orbit.xcodeproj -scheme Orbit -destination 'generic/platform=iOS Simulator' CODE_SIGNING_ALLOWED=NO -quiet

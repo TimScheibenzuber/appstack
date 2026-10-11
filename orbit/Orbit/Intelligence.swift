@@ -58,17 +58,20 @@ final class Brain {
         guard !stale.isEmpty else { return }
         task?.cancel()
         task = Task { [embedder] in
-            var fresh: [(UUID, Date, Vector?)] = []
-            for (id, date, text) in stale {
-                if Task.isCancelled { return }
-                fresh.append((id, date, await embedder.embed(text)))
+            // Publish in batches so progress survives when a newer refresh cancels this one.
+            for start in stride(from: 0, to: stale.count, by: 64) {
+                var batch: [(UUID, Date, Vector?)] = []
+                for (id, date, text) in stale[start..<min(start + 64, stale.count)] {
+                    if Task.isCancelled { return }
+                    batch.append((id, date, await embedder.embed(text)))
+                }
+                var next = vectors
+                for (id, date, vector) in batch {
+                    indexed[id] = date
+                    next[id] = vector
+                }
+                vectors = next
             }
-            var next = vectors
-            for (id, date, vector) in fresh {
-                indexed[id] = date
-                next[id] = vector
-            }
-            vectors = next
         }
     }
 
