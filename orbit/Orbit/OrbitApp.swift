@@ -11,7 +11,9 @@ struct OrbitApp: App {
         .commands { OrbitCommands(store: store) }
         #if os(macOS)
         .defaultSize(width: 1320, height: 840)
+        #endif
 
+        #if os(macOS)
         MenuBarExtra("Orbit", systemImage: "circle.circle") {
             CaptureView().environment(store)
         }

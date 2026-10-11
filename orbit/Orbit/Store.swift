@@ -149,7 +149,10 @@ final class Store {
         }.value
         guard self.vault === vault else { return }
         for item in changed where !pending.contains(item.id) { items[item.id] = item }
-        for id in known.keys where listing[id] == nil && !pending.contains(id) { items[id] = nil }
+        for id in known.keys where listing[id] == nil {
+            stamps[id] = nil
+            if !pending.contains(id) { items[id] = nil }
+        }
         stamps.merge(listing) { _, new in new }
         if let meta, meta != self.meta { self.meta = meta }
         brain.refresh(Array(items.values))
