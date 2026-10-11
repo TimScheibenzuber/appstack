@@ -351,7 +351,7 @@ struct AppModelTests {
     @Test func newConversationsAreEvictedToo() {
         let (model, _) = makeModel()
         for _ in 0..<20 {
-            let id = model.newConversation()
+            model.newConversation()
             model.selectedID = nil // leave the empty chat behind
         }
         #expect(model.cachedChatCount <= 9)
