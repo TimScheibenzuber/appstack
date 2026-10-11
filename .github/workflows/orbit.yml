@@ -23,7 +23,7 @@ jobs:
       - name: Toolchain
         run: xcodebuild -version && swift --version
       - name: Test (macOS)
-        run: xcodebuild test -project Orbit.xcodeproj -scheme Orbit -destination 'platform=macOS' CODE_SIGNING_ALLOWED=NO -quiet
+        run: xcodebuild test -project Orbit.xcodeproj -scheme Orbit -destination 'platform=macOS,arch=arm64' CODE_SIGNING_ALLOWED=NO -quiet
       - name: Build (iOS Simulator)
         if: always()
         run: xcodebuild build -project Orbit.xcodeproj -scheme Orbit -destination 'generic/platform=iOS Simulator' CODE_SIGNING_ALLOWED=NO -quiet

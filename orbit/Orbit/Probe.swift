@@ -8,6 +8,7 @@ import NaturalLanguage
 import QuickLookThumbnailing
 import LocalAuthentication
 import PDFKit
+import QuickLook
 import Accelerate
 
 @Generable
@@ -27,13 +28,10 @@ func probeAI() async throws -> String {
 
 func probeKDF(_ pass: String, salt: Data) -> SymmetricKey {
     var out = [UInt8](repeating: 0, count: 32)
-    let pw = Array(pass.utf8)
     salt.withUnsafeBytes { s in
-        pw.withUnsafeBufferPointer { p in
-            _ = CCKeyDerivationPBKDF(CCPBKDFAlgorithm(kCCPBKDF2), p.baseAddress.map { UnsafeRawPointer($0).assumingMemoryBound(to: CChar.self) }, pw.count,
-                                     s.bindMemory(to: UInt8.self).baseAddress, salt.count,
-                                     CCPseudoRandomAlgorithm(kCCPRFHmacAlgSHA256), 1000, &out, out.count)
-        }
+        _ = CCKeyDerivationPBKDF(CCPBKDFAlgorithm(kCCPBKDF2), pass, pass.utf8.count,
+                                 s.bindMemory(to: UInt8.self).baseAddress, salt.count,
+                                 CCPseudoRandomAlgorithm(kCCPRFHmacAlgSHA256), 1000, &out, out.count)
     }
     return SymmetricKey(data: out)
 }
