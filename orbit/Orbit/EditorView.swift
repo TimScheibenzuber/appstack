@@ -43,49 +43,52 @@ struct EditorView: View {
     // MARK: Header & metadata
 
     private func header(_ item: Binding<Item>) -> some View {
-        HStack(alignment: .top, spacing: 10) {
-            Menu {
-                Picker("Kind", selection: item.kind) {
-                    ForEach(Kind.allCases) { Label($0.label, systemImage: $0.icon).tag($0) }
+        VStack(alignment: .leading, spacing: 10) {
+            HStack(spacing: 10) {
+                Menu {
+                    Picker("Kind", selection: item.kind) {
+                        ForEach(Kind.allCases) { Label($0.label, systemImage: $0.icon).tag($0) }
+                    }
+                } label: {
+                    Glyph(symbol: item.wrappedValue.symbol, tint: item.wrappedValue.kind.tint, size: 34)
                 }
-            } label: {
-                Glyph(symbol: item.wrappedValue.symbol, tint: item.wrappedValue.kind.tint, size: 34)
+                .menuStyle(.button)
+                .buttonStyle(.plain)
+                .menuIndicator(.hidden)
+                .fixedSize()
+
+                Spacer()
+
+                Button { Task { await store.enrich(id) } } label: {
+                    if store.isWorking(id) { ProgressView().controlSize(.small) } else { Image(systemName: "wand.and.sparkles") }
+                }
+                .buttonStyle(.glass)
+                .help("Title, summarize and tag with on-device AI")
+
+                Button { item.wrappedValue.pinned.toggle() } label: {
+                    Image(systemName: item.wrappedValue.pinned ? "pin.fill" : "pin")
+                        .contentTransition(.symbolEffect(.replace))
+                }
+                .buttonStyle(.glass)
+
+                Menu {
+                    if !wide { Button("Open in Focus") { store.focused = id } }
+                    if item.wrappedValue.trashed {
+                        Button("Restore") { item.wrappedValue.trashed = false }
+                        Button("Delete Forever", role: .destructive) { store.deleteForever([id]) }
+                    } else {
+                        Button("Move to Trash", role: .destructive) { store.trash([id]) }
+                    }
+                } label: { Image(systemName: "ellipsis") }
+                .menuIndicator(.hidden)
+                .buttonStyle(.glass)
+                .fixedSize()
             }
-            .menuStyle(.button)
-            .buttonStyle(.plain)
-            .menuIndicator(.hidden)
-            .fixedSize()
 
             TextField("Title", text: item.title, axis: .vertical)
                 .font(wide ? .largeTitle.bold() : .title2.bold())
                 .textFieldStyle(.plain)
                 .lineLimit(1...4)
-                .fixedSize(horizontal: false, vertical: true)
-
-            Button { Task { await store.enrich(id) } } label: {
-                if store.isWorking(id) { ProgressView().controlSize(.small) } else { Image(systemName: "wand.and.sparkles") }
-            }
-            .buttonStyle(.glass)
-            .help("Title, summarize and tag with on-device AI")
-
-            Button { item.wrappedValue.pinned.toggle() } label: {
-                Image(systemName: item.wrappedValue.pinned ? "pin.fill" : "pin")
-                    .contentTransition(.symbolEffect(.replace))
-            }
-            .buttonStyle(.glass)
-
-            Menu {
-                if !wide { Button("Open in Focus") { store.focused = id } }
-                if item.wrappedValue.trashed {
-                    Button("Restore") { item.wrappedValue.trashed = false }
-                    Button("Delete Forever", role: .destructive) { store.deleteForever([id]) }
-                } else {
-                    Button("Move to Trash", role: .destructive) { store.trash([id]) }
-                }
-            } label: { Image(systemName: "ellipsis") }
-            .menuIndicator(.hidden)
-            .buttonStyle(.glass)
-            .fixedSize()
         }
     }
 
