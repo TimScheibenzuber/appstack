@@ -8,6 +8,9 @@ struct MessageRow: View {
     let live: LiveReply?
     let isLastAssistant: Bool
     let chat: ChatViewModel
+    /// Called whenever the live reply grows (drives auto-scroll without making the whole
+    /// chat view depend on the streaming text).
+    var onLiveGrowth: () -> Void = {}
 
     var body: some View {
         switch message.role {
@@ -39,7 +42,7 @@ struct MessageRow: View {
     @ViewBuilder
     private var assistantBody: some View {
         if let live {
-            LiveReplyView(live: live)
+            LiveReplyView(live: live, onGrowth: onLiveGrowth)
         } else {
             VStack(alignment: .leading, spacing: 8) {
                 if !message.thinkingText.isEmpty {
@@ -63,7 +66,9 @@ struct MessageRow: View {
                     Button("Kopieren", systemImage: "doc.on.doc") { UIPasteboard.general.string = message.text }
                 }
                 if isLastAssistant && !chat.isBusy {
-                    Button("Neu generieren", systemImage: "arrow.clockwise") { chat.regenerate() }
+                    Button(message.status.isRefusal ? "Erneut senden" : "Neu generieren", systemImage: "arrow.clockwise") {
+                        chat.regenerate()
+                    }
                 }
             }
         }
@@ -110,16 +115,18 @@ struct MessageRow: View {
 
 private struct LiveReplyView: View {
     let live: LiveReply
+    let onGrowth: () -> Void
 
     var body: some View {
+        let hasText = !live.stableBlocks.isEmpty || !live.tailBlocks.isEmpty
         VStack(alignment: .leading, spacing: 8) {
             if !live.thinking.isEmpty {
-                ThinkingDisclosure(text: live.thinking, isStreaming: live.text.isEmpty)
+                ThinkingDisclosure(text: live.thinking, isStreaming: !hasText)
             }
-            if live.text.isEmpty && live.thinking.isEmpty {
+            if hasText {
+                MarkdownBlocksView(stable: live.stableBlocks, tail: live.tailBlocks)
+            } else if live.thinking.isEmpty {
                 TypingIndicator()
-            } else if !live.text.isEmpty {
-                MarkdownView(text: live.text)
             }
             if let notice = live.notice {
                 Label(notice, systemImage: "arrow.triangle.branch")
@@ -128,6 +135,7 @@ private struct LiveReplyView: View {
             }
         }
         .frame(maxWidth: .infinity, alignment: .leading)
+        .onChange(of: live.revision) { _, _ in onGrowth() }
     }
 }
 
@@ -160,5 +168,12 @@ private struct TypingIndicator: View {
             .foregroundStyle(.secondary)
             .symbolEffect(.variableColor.iterative, options: .repeating)
             .accessibilityLabel("Claude antwortet")
+    }
+}
+
+extension ChatMessage.Status {
+    var isRefusal: Bool {
+        if case .refused = self { return true }
+        return false
     }
 }

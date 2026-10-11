@@ -34,15 +34,10 @@ struct RootView: View {
         .onChange(of: scenePhase) { _, phase in
             model.scenePhaseChanged(to: phase)
         }
-        .task {
-            // Give `start()` a moment to read the Keychain before asking for a key.
-            try? await Task.sleep(for: .milliseconds(300))
-            if !model.hasAPIKey { showKeySetup = true }
+        .onChange(of: model.isLoaded) { _, loaded in
+            if loaded && !model.hasAPIKey { showKeySetup = true }
         }
-        .alert("Speicherfehler", isPresented: Binding(
-            get: { model.storageError != nil },
-            set: { if !$0 { model.clearStorageError() } }
-        )) {
+        .alert("Speicherfehler", isPresented: $model.isShowingStorageError) {
             Button("OK", role: .cancel) {}
         } message: {
             Text(model.storageError ?? "")

@@ -209,31 +209,63 @@ struct ConversationTests {
     }
 }
 
-struct MarkdownSegmenterTests {
-    @Test func splitsProseAndCode() {
-        let text = "Intro\n\n```swift\nlet x = 1\n```\nOutro"
-        #expect(MarkdownSegmenter.segments(of: text) == [
-            .prose("Intro\n"),
+struct MarkdownBlockTests {
+    @Test func splitsParagraphsAndCode() {
+        let text = "Intro\nzweite Zeile\n\n```swift\nlet x = 1\n```\nOutro"
+        #expect(MarkdownBlockSplitter.blocks(of: text) == [
+            .paragraph("Intro\nzweite Zeile"),
             .code(language: "swift", code: "let x = 1", isClosed: true),
-            .prose("Outro"),
+            .paragraph("Outro"),
         ])
     }
 
     @Test func unclosedFenceWhileStreaming() {
-        #expect(MarkdownSegmenter.segments(of: "a\n~~~~ py extra\nprint(1)\n```\n") == [
-            .prose("a"),
-            .code(language: "py", code: "print(1)\n```\n", isClosed: false),
+        #expect(MarkdownBlockSplitter.blocks(of: "a\n~~~~ py extra\nprint(1)\n```\n") == [
+            .paragraph("a"),
+            .code(language: "py", code: "print(1)\n```", isClosed: false),
         ])
     }
 
     @Test func closingFenceMustBeAtLeastAsLong() {
-        #expect(MarkdownSegmenter.segments(of: "````\n```\ninner\n````") == [
+        #expect(MarkdownBlockSplitter.blocks(of: "````\n```\ninner\n````") == [
+            .code(language: nil, code: "```\ninner", isClosed: true),
+        ])
+        // While streaming, an unterminated last line may still grow.
+        #expect(MarkdownBlockSplitter.blocks(of: "````\n```\ninner\n````", isComplete: false) == [
+            .code(language: nil, code: "```\ninner\n````", isClosed: false),
+        ])
+        #expect(MarkdownBlockSplitter.blocks(of: "````\n```\ninner\n````\n") == [
             .code(language: nil, code: "```\ninner", isClosed: true),
         ])
     }
 
-    @Test func inlineBackticksAreNotFences() {
-        #expect(MarkdownSegmenter.segments(of: "use `x` and ``y``") == [.prose("use `x` and ``y``")])
-        #expect(MarkdownSegmenter.segments(of: "    ```\nindented code") == [.prose("    ```\nindented code")])
+    @Test func inlineBackticksAndIndentedFencesAreProse() {
+        #expect(MarkdownBlockSplitter.blocks(of: "use `x` and ``y``") == [.paragraph("use `x` and ``y``")])
+        #expect(MarkdownBlockSplitter.blocks(of: "    ```\nindented code") == [.paragraph("    ```\nindented code")])
+    }
+
+    @Test func incrementalUpdatesMatchOneShotSplitAtEveryPrefix() {
+        let text = "# Titel\n\nAbsatz mit **fett** und Ümlauten 👋\nweiter.\n\n\n- Punkt\n- Punkt 2\n\n```swift\nlet a = 1\n\nlet b = 2\n```\nDanach\n~~~\nopen"
+        let characters = Array(text)
+        var splitter = MarkdownBlockSplitter()
+        for length in 0...characters.count {
+            let prefix = String(characters[..<length])
+            splitter.update(prefix)
+            #expect(splitter.blocks == MarkdownBlockSplitter.blocks(of: prefix, isComplete: false), "prefix length \(length)")
+        }
+        // Title, paragraph, list, closed code block, "Danach" (ended by the next fence).
+        #expect(splitter.stableBlocks.count == 5)
+    }
+
+    @Test func stableBlocksNeverChangeWhileStreaming() {
+        var splitter = MarkdownBlockSplitter()
+        splitter.update("Eins\n\nZwei")
+        #expect(splitter.stableBlocks == [.paragraph("Eins")])
+        #expect(splitter.tailBlocks == [.paragraph("Zwei")])
+        splitter.update("Eins\n\nZwei und drei\n\n")
+        #expect(splitter.stableBlocks == [.paragraph("Eins"), .paragraph("Zwei und drei")])
+        #expect(splitter.tailBlocks.isEmpty)
+        splitter.update("kürzer") // not an extension: starts over
+        #expect(splitter.blocks == [.paragraph("kürzer")])
     }
 }

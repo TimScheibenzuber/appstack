@@ -5,16 +5,19 @@ import Foundation
 struct ErrorPresentation {
     let message: String
     let isMissingKey: Bool
+    let isConnectivityLoss: Bool
     let logDescription: String
 
     init(_ error: any Error) {
         guard let error = error as? ClaudeError else {
             message = error.localizedDescription
             isMissingKey = false
+            isConnectivityLoss = false
             logDescription = String(describing: error)
             return
         }
         logDescription = "\(error) request-id=\(error.requestID ?? "-")"
+        isConnectivityLoss = error.isConnectivityLoss
         isMissingKey = error == .missingAPIKey || {
             if case .http(let info) = error { return info.status == 401 }
             return false

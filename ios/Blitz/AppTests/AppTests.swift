@@ -51,8 +51,9 @@ final class ScriptedTransport: StreamingTransport, @unchecked Sendable {
         "event: \(name)\ndata: \(json)\n\n"
     }
 
-    static func reply(_ text: String, stopReason: String = "end_turn", category: String? = nil) -> String {
-        let details = category.map { #","stop_details":{"type":"refusal","category":"\#($0)"}"# } ?? ""
+    static func reply(_ text: String, stopReason: String = "end_turn", category: String? = nil, recommendedModel: String? = nil) -> String {
+        let recommended = recommendedModel.map { #","recommended_model":"\#($0)""# } ?? ""
+        let details = category.map { #","stop_details":{"type":"refusal","category":"\#($0)"\#(recommended)}"# } ?? ""
         return event("message_start", #"{"type":"message_start","message":{"id":"m","model":"claude-opus-5-5","usage":{"input_tokens":3}}}"#)
             + event("content_block_start", #"{"type":"content_block_start","index":0,"content_block":{"type":"text","text":""}}"#)
             + event("content_block_delta", #"{"type":"content_block_delta","index":0,"delta":{"type":"text_delta","text":"\#(text)"}}"#)
@@ -118,9 +119,46 @@ struct ChatViewModelTests {
         let messages = chat.conversation.messages
         #expect(messages[1].status == .refused(category: "cyber"))
         #expect(messages[1].blocks.isEmpty)
-        #expect(messages.allSatisfy(\.excludedFromContext))
+        #expect(messages.allSatisfy { $0.excludedFromContext })
         #expect(chat.draft == "Frage")
         #expect(chat.conversation.apiMessages().isEmpty)
+    }
+
+    @Test func retryAfterRefusalResendsThePrompt() async throws {
+        let transport = ScriptedTransport([
+            .stream(ScriptedTransport.reply("x", stopReason: "refusal", category: "cyber", recommendedModel: "claude-opus-4-8")),
+            .stream(ScriptedTransport.reply("Antwort")),
+        ])
+        let chat = ChatViewModel(conversation: Conversation(systemPrompt: nil), host: FakeHost(transport: transport))
+        chat.draft = "Frage"
+        chat.send()
+        await waitUntilIdle(chat)
+        #expect(chat.banner?.kind == .retryWithModel("claude-opus-4-8"))
+
+        chat.regenerate(modelID: "claude-opus-4-8")
+        #expect(chat.draft.isEmpty)
+        await waitUntilIdle(chat)
+        let messages = chat.conversation.messages
+        #expect(messages.count == 2)
+        #expect(messages[1].text == "Antwort")
+        #expect(!messages[0].excludedFromContext)
+
+        let body = try #require(JSONSerialization.jsonObject(with: transport.bodies[1]) as? [String: Any])
+        #expect(body["model"] as? String == "claude-opus-4-8")
+        let sent = try #require(body["messages"] as? [[String: Any]])
+        #expect(sent.count == 1)
+        #expect(sent[0]["role"] as? String == "user")
+    }
+
+    @Test func neverSendsAHistoryThatDoesNotEndWithTheUser() async {
+        var conversation = Conversation(systemPrompt: nil)
+        conversation.messages = [ChatMessage(role: .user, blocks: [.text("   ")])]
+        let transport = ScriptedTransport([])
+        let chat = ChatViewModel(conversation: conversation, host: FakeHost(transport: transport))
+        chat.regenerate()
+        #expect(chat.banner?.kind == .error)
+        #expect(!chat.isBusy)
+        #expect(transport.bodies.isEmpty)
     }
 
     @Test func failureShowsBannerAndIsNotReplayed() async {

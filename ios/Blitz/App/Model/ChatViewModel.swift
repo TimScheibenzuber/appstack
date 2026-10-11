@@ -15,16 +15,44 @@ protocol ChatHost: AnyObject {
 @MainActor
 @Observable
 final class LiveReply {
-    fileprivate(set) var text = ""
+    @ObservationIgnored fileprivate(set) var text = ""
+    /// Finished Markdown blocks; never change once produced, so their views are not redrawn.
+    private(set) var stableBlocks: [MarkdownBlock] = []
+    /// The block(s) still growing.
+    private(set) var tailBlocks: [MarkdownBlock] = []
     fileprivate(set) var thinking = ""
     fileprivate(set) var model: String?
     fileprivate(set) var notice: String?
+    /// Bumped on every visible change; cheap to observe for auto-scrolling.
+    private(set) var revision = 0
+    @ObservationIgnored private var splitter = MarkdownBlockSplitter()
+
+    var hasContent: Bool { !text.isEmpty || !thinking.isEmpty }
+
+    fileprivate func append(text delta: String) {
+        text += delta
+        splitter.update(text)
+        if splitter.stableBlocks.count != stableBlocks.count {
+            stableBlocks = splitter.stableBlocks
+        }
+        tailBlocks = splitter.tailBlocks
+        revision &+= 1
+    }
+
+    fileprivate func append(thinking delta: String) {
+        thinking += delta
+        revision &+= 1
+    }
 
     fileprivate func reset(model: String?) {
         text = ""
+        splitter = MarkdownBlockSplitter()
+        stableBlocks = []
+        tailBlocks = []
         thinking = ""
         notice = nil
         self.model = model
+        revision &+= 1
     }
 }
 
@@ -40,7 +68,13 @@ final class ChatViewModel: Identifiable {
     }
 
     struct Banner: Equatable, Identifiable {
-        enum Kind: Equatable { case info, error, missingKey }
+        enum Kind: Equatable {
+            case info
+            case error
+            case missingKey
+            /// A refusal the server-side fallback could not rescue; the API named a model to retry on.
+            case retryWithModel(String)
+        }
         let id = UUID()
         let kind: Kind
         let text: String
@@ -62,14 +96,19 @@ final class ChatViewModel: Identifiable {
     @ObservationIgnored private var pendingText = ""
     @ObservationIgnored private var pendingThinking = ""
     @ObservationIgnored private var flushScheduled = false
+    /// The last turn failed for lack of network; it is re-sent once the network returns.
+    @ObservationIgnored private(set) var awaitsNetwork = false
 
     init(conversation: Conversation, host: any ChatHost) {
         var restored = conversation
         // A turn that was streaming when the app was terminated cannot be resumed.
         for index in restored.messages.indices where restored.messages[index].status == .streaming {
-            restored.messages[index].status = restored.messages[index].text.isEmpty
-                ? .failed(message: "Unterbrochen")
-                : .stopped
+            if restored.messages[index].text.isEmpty {
+                restored.messages[index].status = .failed(message: "Unterbrochen")
+                restored.messages[index].excludedFromContext = true
+            } else {
+                restored.messages[index].status = .stopped
+            }
         }
         self.conversation = restored
         self.id = conversation.id
@@ -105,15 +144,29 @@ final class ChatViewModel: Identifiable {
         streamTask?.cancel()
     }
 
-    /// Re-runs the last turn after a failure or to get a different answer.
-    func regenerate() {
+    /// Re-runs the last turn after a failure or refusal, or to get a different answer.
+    /// `modelID` overrides the configured model for this one turn.
+    func regenerate(modelID: String? = nil) {
         guard !isBusy else { return }
         while let last = conversation.messages.last, last.role == .assistant {
             conversation.messages.removeLast()
         }
-        guard conversation.messages.last?.role == .user else { return }
+        guard let index = conversation.messages.indices.last,
+              conversation.messages[index].role == .user else { return }
+        // Retrying is an explicit request to send this prompt again (e.g. after a refusal).
+        if conversation.messages[index].excludedFromContext {
+            conversation.messages[index].excludedFromContext = false
+            if draft == conversation.messages[index].text { draft = "" }
+        }
         banner = nil
-        startTurn()
+        awaitsNetwork = false
+        startTurn(modelID: modelID)
+    }
+
+    /// Called when connectivity returns.
+    func networkRestored() {
+        guard awaitsNetwork, !isBusy else { return }
+        regenerate()
     }
 
     /// Puts a sent message back into the composer and removes it and everything after it.
@@ -132,7 +185,6 @@ final class ChatViewModel: Identifiable {
     }
 
     func persistNow() {
-        guard !conversation.messages.isEmpty else { return }
         host?.persist(conversation)
     }
 
@@ -144,14 +196,21 @@ final class ChatViewModel: Identifiable {
 
     // MARK: - Streaming
 
-    private func startTurn() {
+    private func startTurn(modelID: String? = nil) {
         guard let host else { return }
         let settings = host.settings
-        let model = settings.model
+        let model = modelID.map(ModelCatalog.info(for:)) ?? settings.model
+        let history = conversation.apiMessages()
+        // Invariant: a request must end with the user's turn (no prefill on current models).
+        guard history.last?.role == .user else {
+            banner = Banner(kind: .error, text: "Es gibt keine Nachricht zum Senden.")
+            persistNow()
+            return
+        }
         let request = MessageRequest.make(
             model: model,
             system: conversation.systemPrompt,
-            messages: conversation.apiMessages(),
+            messages: history,
             effort: settings.effort,
             maxTokens: settings.maxTokens,
             fastMode: settings.fastMode,
@@ -230,7 +289,7 @@ final class ChatViewModel: Identifiable {
         guard !flushScheduled else { return }
         flushScheduled = true
         // The very first token is shown immediately; later ones are batched per frame.
-        let isFirst = live.text.isEmpty && live.thinking.isEmpty
+        let isFirst = !live.hasContent
         Task { [weak self] in
             if !isFirst { try? await Task.sleep(for: Self.flushInterval) }
             self?.flush()
@@ -240,11 +299,11 @@ final class ChatViewModel: Identifiable {
     private func flush() {
         flushScheduled = false
         if !pendingThinking.isEmpty {
-            live.thinking += pendingThinking
+            live.append(thinking: pendingThinking)
             pendingThinking = ""
         }
         if !pendingText.isEmpty {
-            live.text += pendingText
+            live.append(text: pendingText)
             pendingText = ""
         }
     }
@@ -265,6 +324,12 @@ final class ChatViewModel: Identifiable {
             if index > 0, conversation.messages[index - 1].role == .user {
                 conversation.messages[index - 1].excludedFromContext = true
                 if draft.isEmpty { draft = conversation.messages[index - 1].text }
+            }
+            if let recommended = final.stopDetails?.recommendedModel, !recommended.isEmpty {
+                banner = Banner(
+                    kind: .retryWithModel(recommended),
+                    text: "Abgelehnt. Mit \(ModelCatalog.info(for: recommended).displayName) erneut versuchen?"
+                )
             }
         case .maxTokens?:
             message.status = .truncated
@@ -307,7 +372,11 @@ final class ChatViewModel: Identifiable {
         conversation.messages[index].status = .failed(message: presentation.message)
         // A broken partial reply is shown but not replayed as if it were Claude's answer.
         conversation.messages[index].excludedFromContext = true
-        banner = Banner(kind: presentation.isMissingKey ? .missingKey : .error, text: presentation.message)
+        awaitsNetwork = presentation.isConnectivityLoss
+        let text = awaitsNetwork
+            ? "\(presentation.message) Wird automatisch erneut gesendet, sobald das Netz zurück ist."
+            : presentation.message
+        banner = Banner(kind: presentation.isMissingKey ? .missingKey : .error, text: text)
         live.reset(model: nil)
         persistNow()
     }

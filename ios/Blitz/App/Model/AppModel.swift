@@ -25,7 +25,15 @@ final class AppModel: ChatHost {
     var selectedID: UUID?
     private(set) var hasAPIKey = false
     private(set) var isOnline = true
+    /// True once settings, key presence and the conversation index have been loaded.
+    private(set) var isLoaded = false
     private(set) var storageError: String?
+
+    /// Drives the storage error alert.
+    var isShowingStorageError: Bool {
+        get { storageError != nil }
+        set { if !newValue { storageError = nil } }
+    }
 
     let client: ClaudeClient
     @ObservationIgnored private let vault: APIKeyVault
@@ -58,11 +66,19 @@ final class AppModel: ChatHost {
         guard !didStart else { return }
         didStart = true
         network.start { [weak self] connected in
-            Task { @MainActor in self?.isOnline = connected }
+            Task { @MainActor [weak self] in self?.connectivityChanged(connected) }
         }
         hasAPIKey = ((try? await vault.key()) ?? nil)?.isEmpty == false
         summaries = await store.summaries()
+        isLoaded = true
         if hasAPIKey { await client.prewarm() }
+    }
+
+    private func connectivityChanged(_ connected: Bool) {
+        isOnline = connected
+        guard connected else { return }
+        // Turns that failed while offline are re-sent automatically.
+        for chat in chats.values { chat.networkRestored() }
     }
 
     func scenePhaseChanged(to phase: ScenePhase) {
@@ -115,7 +131,22 @@ final class AppModel: ChatHost {
         if let existing = chats[id] { return existing }
         let chat = ChatViewModel(conversation: conversation, host: self)
         chats[id] = chat
+        evictIdleChats(keeping: id)
         return chat
+    }
+
+    /// Bounds memory: idle conversations that are not on screen are dropped from the cache
+    /// (they are on disk); chats that are still streaming are always kept.
+    private func evictIdleChats(keeping id: UUID) {
+        let limit = 8
+        guard chats.count > limit else { return }
+        let evictable = chats.values.filter {
+            $0.id != id && $0.id != selectedID && !$0.isBusy && !$0.awaitsNetwork
+        }
+        // Every state change is already saved, so dropping the cached model loses nothing.
+        for chat in evictable.prefix(chats.count - limit) {
+            chats[chat.id] = nil
+        }
     }
 
     @discardableResult
@@ -144,7 +175,15 @@ final class AppModel: ChatHost {
     /// Called by a chat whenever its conversation reached a state worth saving.
     func persist(_ conversation: Conversation) {
         // Ignore late saves from a chat that was deleted meanwhile (no resurrection).
-        guard !conversation.messages.isEmpty, chats[conversation.id] != nil else { return }
+        guard chats[conversation.id] != nil else { return }
+        let store = store
+        if conversation.messages.isEmpty {
+            // Emptied by editing its first message: remove the stale copy on disk.
+            guard summaries.contains(where: { $0.id == conversation.id }) else { return }
+            summaries.removeAll { $0.id == conversation.id }
+            enqueueStorage { try await store.delete(conversation.id) }
+            return
+        }
         let summary = ConversationSummary(conversation)
         if let index = summaries.firstIndex(where: { $0.id == summary.id }) {
             if summaries[index] != summary {
@@ -154,7 +193,6 @@ final class AppModel: ChatHost {
         } else {
             summaries.insert(summary, at: 0)
         }
-        let store = store
         enqueueStorage { try await store.save(conversation) }
     }
 
@@ -173,9 +211,5 @@ final class AppModel: ChatHost {
     private func report(_ error: any Error) {
         Self.log.error("Storage error: \(error.localizedDescription, privacy: .public)")
         storageError = "Speichern fehlgeschlagen: \(error.localizedDescription)"
-    }
-
-    func clearStorageError() {
-        storageError = nil
     }
 }

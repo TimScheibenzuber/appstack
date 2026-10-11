@@ -18,7 +18,10 @@ struct ChatView: View {
                             message: message,
                             live: message.status == .streaming ? chat.live : nil,
                             isLastAssistant: message.id == chat.lastAssistantID,
-                            chat: chat
+                            chat: chat,
+                            onLiveGrowth: {
+                                if isPinnedToBottom { proxy.scrollTo(Self.bottomID, anchor: .bottom) }
+                            }
                         )
                         .id(message.id)
                     }
@@ -35,9 +38,6 @@ struct ChatView: View {
             }
             .defaultScrollAnchor(.bottom)
             .scrollDismissesKeyboard(.interactively)
-            .onChange(of: chat.live.text) { _, _ in
-                if isPinnedToBottom { proxy.scrollTo(Self.bottomID, anchor: .bottom) }
-            }
             .onChange(of: chat.conversation.messages.count) { _, _ in
                 withAnimation(.easeOut(duration: 0.2)) { proxy.scrollTo(Self.bottomID, anchor: .bottom) }
             }
@@ -77,7 +77,6 @@ struct ChatView: View {
 
 /// Activity, connectivity and error banner above the composer.
 private struct StatusStrip: View {
-    @Environment(AppModel.self) private var model
     let chat: ChatViewModel
     let isOnline: Bool
     @State private var showKeySetup = false
@@ -93,6 +92,9 @@ private struct StatusStrip: View {
                         .frame(maxWidth: .infinity, alignment: .leading)
                     if banner.kind == .missingKey {
                         Button("API-Key") { showKeySetup = true }
+                            .font(.footnote.bold())
+                    } else if case .retryWithModel(let modelID) = banner.kind, !chat.isBusy {
+                        Button("Versuchen") { chat.regenerate(modelID: modelID) }
                             .font(.footnote.bold())
                     } else if banner.kind == .error, !chat.isBusy {
                         Button("Erneut") { chat.regenerate() }
@@ -161,6 +163,9 @@ private struct ModelMenu: View {
             }
             if model.settings.model.supportsFastMode {
                 Toggle("Fast Mode", isOn: $model.settings.fastMode)
+            }
+            Section {
+                Text("Modell- oder Aufwandswechsel gilt ab der nächsten Nachricht und baut den Cache dieses Chats einmal neu auf.")
             }
         } label: {
             HStack(spacing: 4) {
