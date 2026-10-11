@@ -20,6 +20,10 @@ final class GraphModel {
     @ObservationIgnored private(set) var neighbours: [Set<Int>] = []
     @ObservationIgnored var pos: [SIMD2<Double>] = []
     @ObservationIgnored var dragging: Int?
+    // Camera: screen offset of the layout origin from the view centre, and scale.
+    @ObservationIgnored var zoom = 1.0
+    @ObservationIgnored var offset = SIMD2<Double>.zero
+    @ObservationIgnored var follow = true
     @ObservationIgnored private var vel: [SIMD2<Double>] = []
     @ObservationIgnored private var alpha = 1.0
 
@@ -53,6 +57,27 @@ final class GraphModel {
     func heat(_ value: Double) {
         alpha = max(alpha, value)
         if !running { running = true }
+    }
+
+    /// Redraws a few frames after a camera change while the layout is at rest.
+    func nudge() { heat(0.0065) }
+
+    /// Eases the camera toward a view that fits the whole layout.
+    func frame(_ size: CGSize) {
+        guard follow, let first = pos.first else { return }
+        let lo = pos.reduce(first) { pointwiseMin($0, $1) }, hi = pos.reduce(first) { pointwiseMax($0, $1) }
+        let extent = hi - lo + SIMD2(160, 120)
+        let target = min(max(min(size.width / extent.x, size.height / extent.y), 0.25), 1.8)
+        zoom += (target - zoom) * 0.12
+        offset += (-(lo + hi) / 2 * zoom - offset) * 0.12
+    }
+
+    func toModel(_ p: CGPoint, in size: CGSize) -> SIMD2<Double> {
+        SIMD2((p.x - size.width / 2 - offset.x) / zoom, (p.y - size.height / 2 - offset.y) / zoom)
+    }
+
+    func toScreen(_ i: Int, in size: CGSize) -> CGPoint {
+        CGPoint(x: size.width / 2 + offset.x + pos[i].x * zoom, y: size.height / 2 + offset.y + pos[i].y * zoom)
     }
 
     func step() {
@@ -107,35 +132,38 @@ final class GraphModel {
 struct GraphView: View {
     @Environment(Store.self) private var store
     @State private var model = GraphModel()
-    @State private var zoom = 1.0
-    @State private var pan = CGSize.zero
-    @State private var panStart: CGSize?
     @State private var hover: Int?
     @State private var semantic = true
-    @GestureState private var pinch = 1.0
+    @State private var panStart: SIMD2<Double>?
+    @State private var zoomStart: Double?
 
     private let cap = 300
 
     var body: some View {
         let selection = store.selection
         GeometryReader { geo in
-            let center = CGPoint(x: geo.size.width / 2 + pan.width, y: geo.size.height / 2 + pan.height)
-            let scale = zoom * pinch
+            let size = geo.size
             TimelineView(.animation(paused: !model.running)) { _ in
-                Canvas { context, _ in
+                Canvas { context, size in
                     model.step()
-                    draw(context, center: center, scale: scale, selection: selection)
+                    model.frame(size)
+                    draw(context, size: size, selection: selection)
                 }
             }
             .contentShape(.rect)
-            .gesture(drag(center: center, scale: scale))
+            .gesture(drag(size))
             .simultaneousGesture(MagnifyGesture()
-                .updating($pinch) { value, state, _ in state = value.magnification }
-                .onEnded { zoom = clamp(zoom * $0.magnification) })
-            .onTapGesture(coordinateSpace: .local) { point in tap(point, center: center, scale: scale) }
+                .onChanged { value in
+                    if zoomStart == nil { zoomStart = model.zoom }
+                    model.follow = false
+                    model.zoom = clamp((zoomStart ?? 1) * value.magnification)
+                    model.nudge()
+                }
+                .onEnded { _ in zoomStart = nil })
+            .onTapGesture(coordinateSpace: .local) { point in tap(point, size) }
             .onContinuousHover { phase in
                 if case .active(let point) = phase {
-                    let h = model.hit(toModel(point, center, scale), scale: scale)
+                    let h = model.hit(model.toModel(point, in: size), scale: model.zoom)
                     if h != hover { hover = h }
                 } else if hover != nil {
                     hover = nil
@@ -207,9 +235,10 @@ struct GraphView: View {
 
     // MARK: Drawing
 
-    private func draw(_ context: GraphicsContext, center: CGPoint, scale: Double, selection: Set<UUID>) {
+    private func draw(_ context: GraphicsContext, size: CGSize, selection: Set<UUID>) {
         let m = model
-        func point(_ i: Int) -> CGPoint { CGPoint(x: center.x + m.pos[i].x * scale, y: center.y + m.pos[i].y * scale) }
+        let scale = m.zoom
+        func point(_ i: Int) -> CGPoint { m.toScreen(i, in: size) }
         let focus = hover ?? m.nodes.firstIndex { selection.contains($0.id) }
         let lit = focus.map { m.neighbours[$0].union([$0]) }
 
@@ -244,7 +273,7 @@ struct GraphView: View {
             if node.role != .item {
                 context.stroke(Circle().path(in: rect.insetBy(dx: -3, dy: -3)), with: .color(node.color.opacity(faded ? 0.15 : 0.45)), lineWidth: 1.5)
             }
-            let showLabel = node.role != .item || scale > 1.6 || (lit?.contains(i) ?? false)
+            let showLabel = node.role != .item || m.nodes.count <= 40 || scale > 1.4 || (lit?.contains(i) ?? false)
             if showLabel && !faded {
                 let font: Font = node.role == .space ? .headline : node.role == .project ? .subheadline.weight(.medium) : .caption
                 context.draw(Text(label(node)).font(font).foregroundStyle(.primary), at: CGPoint(x: p.x, y: p.y + r + 4), anchor: .top)
@@ -254,21 +283,19 @@ struct GraphView: View {
 
     // MARK: Interaction
 
-    private func toModel(_ p: CGPoint, _ center: CGPoint, _ scale: Double) -> SIMD2<Double> {
-        SIMD2((p.x - center.x) / scale, (p.y - center.y) / scale)
-    }
-
-    private func drag(center: CGPoint, scale: Double) -> some Gesture {
+    private func drag(_ size: CGSize) -> some Gesture {
         DragGesture(minimumDistance: 3)
             .onChanged { value in
                 if panStart == nil && model.dragging == nil {
-                    if let i = model.hit(toModel(value.startLocation, center, scale), scale: scale) { model.dragging = i } else { panStart = pan }
+                    model.follow = false
+                    if let i = model.hit(model.toModel(value.startLocation, in: size), scale: model.zoom) { model.dragging = i } else { panStart = model.offset }
                 }
                 if let i = model.dragging {
-                    model.pos[i] = toModel(value.location, center, scale)
+                    model.pos[i] = model.toModel(value.location, in: size)
                     model.heat(0.25)
                 } else if let start = panStart {
-                    pan = CGSize(width: start.width + value.translation.width, height: start.height + value.translation.height)
+                    model.offset = start + SIMD2(value.translation.width, value.translation.height)
+                    model.nudge()
                 }
             }
             .onEnded { _ in
@@ -277,8 +304,8 @@ struct GraphView: View {
             }
     }
 
-    private func tap(_ point: CGPoint, center: CGPoint, scale: Double) {
-        guard let i = model.hit(toModel(point, center, scale), scale: scale) else {
+    private func tap(_ point: CGPoint, _ size: CGSize) {
+        guard let i = model.hit(model.toModel(point, in: size), scale: model.zoom) else {
             store.selection = []
             return
         }
@@ -293,6 +320,12 @@ struct GraphView: View {
     }
 
     private func clamp(_ z: Double) -> Double { min(max(z, 0.25), 4) }
+
+    private func zoom(by factor: Double) {
+        model.follow = false
+        model.zoom = clamp(model.zoom * factor)
+        model.nudge()
+    }
 
     private var legend: some View {
         HStack(spacing: 14) {
@@ -312,9 +345,10 @@ struct GraphView: View {
     private var controls: some View {
         GlassEffectContainer(spacing: 8) {
             HStack(spacing: 8) {
-                Button { zoom = clamp(zoom / 1.35) } label: { Image(systemName: "minus.magnifyingglass") }
-                Button { zoom = 1; pan = .zero } label: { Image(systemName: "scope") }
-                Button { zoom = clamp(zoom * 1.35) } label: { Image(systemName: "plus.magnifyingglass") }
+                Button { zoom(by: 1 / 1.35) } label: { Image(systemName: "minus.magnifyingglass") }
+                Button { model.follow = true; model.heat(0.06) } label: { Image(systemName: "scope") }
+                    .help("Fit the whole graph")
+                Button { zoom(by: 1.35) } label: { Image(systemName: "plus.magnifyingglass") }
                 Toggle(isOn: $semantic) { Image(systemName: "sparkles") }
                     .toggleStyle(.button)
                     .help("Show semantic similarity (on-device embeddings)")

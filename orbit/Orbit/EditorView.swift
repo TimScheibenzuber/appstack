@@ -15,6 +15,9 @@ struct EditorView: View {
         ScrollView {
             VStack(alignment: .leading, spacing: 18) {
                 header(item)
+                Text("Created \(item.wrappedValue.created.formatted(date: .abbreviated, time: .omitted)) · edited \(item.wrappedValue.updated.formatted(.relative(presentation: .named)))")
+                    .font(.caption).foregroundStyle(.tertiary)
+                    .padding(.top, -10)
                 meta(item.wrappedValue)
                 if let s = store.suggestion(for: item.wrappedValue) { suggestion(s.space, s.project) }
                 if !item.wrappedValue.summary.isEmpty {
@@ -104,9 +107,7 @@ struct EditorView: View {
                 Label(item.status.label, systemImage: item.status.icon)
             }
             .fixedSize()
-            Spacer()
-            Text("Edited \(item.updated.formatted(.relative(presentation: .named)))")
-                .font(.caption).foregroundStyle(.tertiary)
+            Spacer(minLength: 0)
         }
         .font(.callout)
         .buttonStyle(.glass)

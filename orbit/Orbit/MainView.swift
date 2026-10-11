@@ -32,8 +32,8 @@ struct MainView: View {
         }
     }
 
-    @ViewBuilder private var content: some View {
-        Group {
+    private var content: some View {
+        ZStack {
             if let id = store.focused, store.items[id] != nil {
                 FocusView(id: id)
             } else if store.scope == .overview {
@@ -53,7 +53,7 @@ struct MainView: View {
     private var inspectorBinding: Binding<Bool> {
         Binding(get: { showInspector && store.selected != nil && !focusingText }, set: { shown in
             #if os(macOS)
-            showInspector = shown
+            if store.selected != nil { showInspector = shown }   // ignore SwiftUI hiding it for an empty selection
             #else
             if !shown { store.selection = [] }
             #endif

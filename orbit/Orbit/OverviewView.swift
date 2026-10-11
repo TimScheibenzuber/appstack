@@ -4,6 +4,16 @@ import Charts
 struct OverviewView: View {
     @Environment(Store.self) private var store
     @State private var hoveredDay: Date?
+    #if os(iOS)
+    @Environment(\.horizontalSizeClass) private var sizeClass
+    #endif
+
+    private func columns(_ count: Int) -> [GridItem] {
+        #if os(iOS)
+        let count = sizeClass == .compact ? max(1, count / 2) : count
+        #endif
+        return Array(repeating: GridItem(.flexible(), spacing: 14, alignment: .top), count: count)
+    }
 
     var body: some View {
         let live = store.items.values.filter { !$0.trashed }
@@ -16,14 +26,14 @@ struct OverviewView: View {
                     Text(Date.now.formatted(date: .complete, time: .omitted)).foregroundStyle(.secondary)
                 }
 
-                LazyVGrid(columns: [GridItem(.adaptive(minimum: 170), spacing: 14)], spacing: 14) {
+                LazyVGrid(columns: columns(4), spacing: 14) {
                     StatTile(value: live.count, label: "Items", icon: "square.stack.3d.up.fill", tint: .blue)
                     StatTile(value: store.count(.questions), label: "Open questions", icon: "questionmark.bubble.fill", tint: .orange)
                     StatTile(value: live.count { $0.created > weekAgo }, label: "Added this week", icon: "sparkles", tint: .purple)
                     StatTile(value: store.count(.inbox), label: "Unsorted in Inbox", icon: "tray.fill", tint: .teal)
                 }
 
-                LazyVGrid(columns: [GridItem(.adaptive(minimum: 380), spacing: 14, alignment: .top)], spacing: 14) {
+                LazyVGrid(columns: columns(2), spacing: 14) {
                     Card(title: "Captured per day", subtitle: "Last 30 days · \(days.reduce(0) { $0 + $1.count }) items") {
                         activityChart(days)
                     }
