@@ -127,6 +127,7 @@ struct PaletteView: View {
         }
         list += [
             Entry(id: "import", title: "Import Files or Chat Exports…", subtitle: "Claude & ChatGPT conversations.json supported", icon: "square.and.arrow.down", tint: .indigo) { store.showImporter = true },
+            Entry(id: "samples", title: "Add Sample Content", subtitle: "Spaces, projects, questions, a chat and a mindmap", icon: "shippingbox", tint: .brown) { store.addSampleContent() },
             Entry(id: "sort", title: "Auto-Sort Inbox", subtitle: "On-device AI", icon: "wand.and.sparkles", tint: .purple) { store.autoSort() },
             Entry(id: "overview", title: "Go to Overview", subtitle: "", icon: "square.grid.2x2", tint: .blue) { store.scope = .overview; store.focused = nil },
             Entry(id: "inbox", title: "Go to Inbox", subtitle: "", icon: "tray", tint: .blue) { store.scope = .inbox; store.focused = nil },

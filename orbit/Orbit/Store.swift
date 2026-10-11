@@ -479,6 +479,62 @@ final class Store {
         return (space, project(s.project))
     }
 
+    /// A small realistic workspace to explore the views with.
+    func addSampleContent() {
+        let work = meta.spaces.first { $0.name == "Work" }?.id ?? { addSpace("Work"); return meta.spaces.last!.id }()
+        let personal = meta.spaces.first { $0.name == "Personal" }?.id ?? { addSpace("Personal"); return meta.spaces.last!.id }()
+        let launch = addProject("Product Launch", in: work), research = addProject("User Research", in: work)
+        let day: TimeInterval = 86_400
+        var added: [Item] = []
+        func add(_ kind: Kind, _ title: String, _ body: String, space: UUID? = nil, project: UUID? = nil,
+                 status: Status = .none, tags: [String] = [], age: Double) -> UUID {
+            let date = Date.now.addingTimeInterval(-age * day)
+            added.append(Item(kind: kind, title: title, body: body, tags: tags, space: space, project: project,
+                              status: status, created: date, updated: date))
+            return added.last!.id
+        }
+        let plan = add(.note, "Launch plan v2", "Beta in **May**, public launch in June.\nOwners: product, marketing, support.\nRisks: onboarding drop-off, pricing clarity.",
+                       space: work, project: launch.id, status: .active, tags: ["launch", "roadmap"], age: 1)
+        let pricing = add(.question, "Which pricing tier converts best?", "Compare monthly vs. annual in the beta cohort.",
+                          space: work, project: launch.id, status: .open, tags: ["pricing"], age: 2)
+        _ = add(.question, "Do we need SOC 2 before the enterprise pilot?", "Ask legal and the two pilot customers.",
+                space: work, project: launch.id, status: .active, tags: ["security", "enterprise"], age: 4)
+        let interview = add(.note, "Interview: Anna, CFO at a 40-person agency", "Pain: invoices scattered across tools. Would pay for one place with search. Wants exports for the accountant.",
+                            space: work, project: research.id, status: .done, tags: ["interview", "finance"], age: 6)
+        _ = add(.note, "Competitor teardown: note apps", "Strong at writing, weak at files and AI chats. Nobody shows how knowledge connects.",
+                space: work, project: research.id, tags: ["competition"], age: 9)
+        _ = add(.chat, "Market sizing for the EU", Importer.transcript([
+            .init(role: .user, text: "Estimate the number of agencies with 10 to 50 employees in Germany, France and the Netherlands."),
+            .init(role: .assistant, text: "A rough range is **18,000 to 26,000**. The biggest uncertainty is how agencies are classified in each registry."),
+            .init(role: .user, text: "Which assumption moves the number most?"),
+            .init(role: .assistant, text: "The share of freelancers counted as agencies. Excluding them lowers the estimate by about a third."),
+        ]), space: work, project: research.id, tags: ["market"], age: 3)
+        var mindmap = Item(kind: .mindmap, title: "Q4 Strategy", space: work, created: .now.addingTimeInterval(-2 * day), updated: .now.addingTimeInterval(-2 * day))
+        let root = MindNode(text: "Q4 Strategy")
+        let growth = MindNode(text: "Growth", parent: root.id), product = MindNode(text: "Product", parent: root.id)
+        let team = MindNode(text: "Team", parent: root.id), money = MindNode(text: "Finance", parent: root.id)
+        mindmap.nodes = [root, growth, product, team, money,
+                         MindNode(text: "Referral program", parent: growth.id), MindNode(text: "EU expansion", parent: growth.id),
+                         MindNode(text: "Offline mode", parent: product.id), MindNode(text: "Shared spaces", parent: product.id),
+                         MindNode(text: "Hire 2 engineers", parent: team.id), MindNode(text: "Runway 18 months", parent: money.id)]
+        added.append(mindmap)
+        _ = add(.note, "Marathon training plan", "16 weeks, 4 runs per week. Long run on Sundays, +1.5 km each week.",
+                space: personal, tags: ["running"], age: 5)
+        _ = add(.question, "Which shoes for long distance?", "Cushioning vs. weight. Try two pairs in store.",
+                space: personal, status: .open, tags: ["running"], age: 7)
+        _ = add(.note, "Books 2026", "Thinking in Systems · The Mom Test · Four Thousand Weeks", space: personal, tags: ["reading"], age: 12)
+        _ = add(.note, "Idea: weekly digest email", "Send a Monday summary of open questions and what changed in each project.", age: 0.2)
+        _ = add(.note, "Pricing page copy draft", "Headline: One calm place for everything you create. Annual plan saves two months.", age: 0.5)
+        if let i = added.firstIndex(where: { $0.id == plan }) { added[i].links = [pricing, interview] }
+        withAnimation(.snappy) {
+            for item in added {
+                items[item.id] = item
+                markDirty(item.id)
+            }
+        }
+        notify("Added \(added.count) sample items")
+    }
+
     /// Files every inbox item whose neighbours agree on a space.
     func autoSort() {
         var moved = 0

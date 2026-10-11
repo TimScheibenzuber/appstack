@@ -25,10 +25,17 @@ jobs:
       - name: Test (macOS)
         run: |
           set +e
-          xcodebuild test -project Orbit.xcodeproj -scheme Orbit -destination 'platform=macOS,arch=arm64' CODE_SIGNING_ALLOWED=NO > test.log 2>&1
+          TEST_RUNNER_ORBIT_SHOTS="$RUNNER_TEMP/shots" xcodebuild test -project Orbit.xcodeproj -scheme Orbit -destination 'platform=macOS,arch=arm64' CODE_SIGNING_ALLOWED=NO > test.log 2>&1
           status=$?
           grep -E "error:|warning: |✔ Test|✘|Test run with|TEST (SUCCEEDED|FAILED)" test.log
           exit $status
+      - name: Upload screenshots
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: orbit-screenshots
+          path: ${{ runner.temp }}/shots
+          if-no-files-found: warn
       - name: Build (iOS Simulator)
         if: always()
         run: xcodebuild build -project Orbit.xcodeproj -scheme Orbit -destination 'generic/platform=iOS Simulator' CODE_SIGNING_ALLOWED=NO -quiet
