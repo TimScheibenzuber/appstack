@@ -65,7 +65,7 @@ jobs:
             -destination "id=${{ steps.sim.outputs.udid }}" \
             CODE_SIGNING_ALLOWED=NO > build-test.log 2>&1
           status=$?
-          grep -E "error:|warning:|Test Suite|Executed|✔|✘|\*\* " build-test.log | grep -v "^ld: warning" | tail -150
+          grep -E "error:|warning:|Fatal error|Restarting after|Test Suite|Executed|✔|✘|↳|\*\* " build-test.log | grep -v "^ld: warning" | tail -200
           exit $status
       - name: Build app (Release, device)
         if: always() && steps.sim.outcome == 'success'

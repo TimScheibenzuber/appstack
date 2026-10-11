@@ -86,7 +86,7 @@ struct ChatViewModelTests {
         }
     }
 
-    @Test func sendStreamsAndPersistsReply() async {
+    @Test func sendStreamsAndPersistsReply() async throws {
         let transport = ScriptedTransport([.stream(ScriptedTransport.reply("Hallo!"))])
         let host = FakeHost(transport: transport)
         let chat = ChatViewModel(conversation: Conversation(systemPrompt: "kurz"), host: host)
@@ -97,7 +97,7 @@ struct ChatViewModelTests {
         await waitUntilIdle(chat)
 
         let messages = chat.conversation.messages
-        #expect(messages.count == 2)
+        try #require(messages.count == 2)
         #expect(messages[0].text == "Hi")
         #expect(messages[1].text == "Hallo!")
         #expect(messages[1].status == .complete)
@@ -106,17 +106,20 @@ struct ChatViewModelTests {
         #expect(host.saved.last?.messages.count == 2)
         #expect(chat.banner == nil)
 
-        let body = try? JSONSerialization.jsonObject(with: transport.bodies[0]) as? [String: Any]
+        try #require(transport.bodies.count == 1)
+        let body = try JSONSerialization.jsonObject(with: transport.bodies[0]) as? [String: Any]
         #expect(body?["system"] as? String == "kurz")
     }
 
-    @Test func refusalIsExcludedAndPromptReturned() async {
+    @Test func refusalIsExcludedAndPromptReturned() async throws {
         let transport = ScriptedTransport([.stream(ScriptedTransport.reply("x", stopReason: "refusal", category: "cyber"))])
-        let chat = ChatViewModel(conversation: Conversation(systemPrompt: nil), host: FakeHost(transport: transport))
+        let host = FakeHost(transport: transport) // the view model holds its host weakly
+        let chat = ChatViewModel(conversation: Conversation(systemPrompt: nil), host: host)
         chat.draft = "Frage"
         chat.send()
         await waitUntilIdle(chat)
         let messages = chat.conversation.messages
+        try #require(messages.count == 2)
         #expect(messages[1].status == .refused(category: "cyber"))
         #expect(messages[1].blocks.isEmpty)
         #expect(messages.allSatisfy { $0.excludedFromContext })
@@ -129,7 +132,8 @@ struct ChatViewModelTests {
             .stream(ScriptedTransport.reply("x", stopReason: "refusal", category: "cyber", recommendedModel: "claude-opus-4-8")),
             .stream(ScriptedTransport.reply("Antwort")),
         ])
-        let chat = ChatViewModel(conversation: Conversation(systemPrompt: nil), host: FakeHost(transport: transport))
+        let host = FakeHost(transport: transport) // the view model holds its host weakly
+        let chat = ChatViewModel(conversation: Conversation(systemPrompt: nil), host: host)
         chat.draft = "Frage"
         chat.send()
         await waitUntilIdle(chat)
@@ -139,10 +143,11 @@ struct ChatViewModelTests {
         #expect(chat.draft.isEmpty)
         await waitUntilIdle(chat)
         let messages = chat.conversation.messages
-        #expect(messages.count == 2)
+        try #require(messages.count == 2)
         #expect(messages[1].text == "Antwort")
         #expect(!messages[0].excludedFromContext)
 
+        try #require(transport.bodies.count == 2)
         let body = try #require(JSONSerialization.jsonObject(with: transport.bodies[1]) as? [String: Any])
         #expect(body["model"] as? String == "claude-opus-4-8")
         let sent = try #require(body["messages"] as? [[String: Any]])
@@ -154,20 +159,23 @@ struct ChatViewModelTests {
         var conversation = Conversation(systemPrompt: nil)
         conversation.messages = [ChatMessage(role: .user, blocks: [.text("   ")])]
         let transport = ScriptedTransport([])
-        let chat = ChatViewModel(conversation: conversation, host: FakeHost(transport: transport))
+        let host = FakeHost(transport: transport)
+        let chat = ChatViewModel(conversation: conversation, host: host)
         chat.regenerate()
         #expect(chat.banner?.kind == .error)
         #expect(!chat.isBusy)
         #expect(transport.bodies.isEmpty)
     }
 
-    @Test func failureShowsBannerAndIsNotReplayed() async {
+    @Test func failureShowsBannerAndIsNotReplayed() async throws {
         let transport = ScriptedTransport([.status(401, #"{"type":"error","error":{"type":"authentication_error","message":"invalid x-api-key"}}"#)])
-        let chat = ChatViewModel(conversation: Conversation(systemPrompt: nil), host: FakeHost(transport: transport))
+        let host = FakeHost(transport: transport) // the view model holds its host weakly
+        let chat = ChatViewModel(conversation: Conversation(systemPrompt: nil), host: host)
         chat.draft = "Hi"
         chat.send()
         await waitUntilIdle(chat)
         #expect(chat.banner?.kind == .missingKey)
+        try #require(chat.conversation.messages.count == 2)
         guard case .failed = chat.conversation.messages[1].status else {
             Issue.record("expected failed status")
             return
@@ -177,7 +185,8 @@ struct ChatViewModelTests {
 
     @Test func stopKeepsPartialText() async {
         let transport = ScriptedTransport([.hang])
-        let chat = ChatViewModel(conversation: Conversation(systemPrompt: nil), host: FakeHost(transport: transport))
+        let host = FakeHost(transport: transport) // the view model holds its host weakly
+        let chat = ChatViewModel(conversation: Conversation(systemPrompt: nil), host: host)
         chat.draft = "Hi"
         chat.send()
         for _ in 0..<200 where chat.live.text.isEmpty {
@@ -189,13 +198,15 @@ struct ChatViewModelTests {
         #expect(chat.conversation.messages.last?.text == "Teil")
     }
 
-    @Test func editTruncatesHistory() async {
+    @Test func editTruncatesHistory() async throws {
         let transport = ScriptedTransport([.stream(ScriptedTransport.reply("A"))])
-        let chat = ChatViewModel(conversation: Conversation(systemPrompt: nil), host: FakeHost(transport: transport))
+        let host = FakeHost(transport: transport) // the view model holds its host weakly
+        let chat = ChatViewModel(conversation: Conversation(systemPrompt: nil), host: host)
         chat.draft = "Erste"
         chat.send()
         await waitUntilIdle(chat)
-        chat.edit(chat.conversation.messages[0].id)
+        let first = try #require(chat.conversation.messages.first)
+        chat.edit(first.id)
         #expect(chat.conversation.messages.isEmpty)
         #expect(chat.draft == "Erste")
     }
@@ -206,8 +217,10 @@ struct ChatViewModelTests {
             ChatMessage(role: .user, blocks: [.text("Q")]),
             ChatMessage(role: .assistant, blocks: [], status: .streaming),
         ]
-        let chat = ChatViewModel(conversation: conversation, host: FakeHost(transport: ScriptedTransport([])))
-        #expect(chat.conversation.messages[1].status == .failed(message: "Unterbrochen"))
+        let host = FakeHost(transport: ScriptedTransport([]))
+        let chat = ChatViewModel(conversation: conversation, host: host)
+        #expect(chat.conversation.messages.last?.status == .failed(message: "Unterbrochen"))
+        #expect(chat.conversation.messages.last?.excludedFromContext == true)
         #expect(!chat.isBusy)
     }
 }
