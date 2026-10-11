@@ -1,0 +1,7 @@
+.build/
+.swiftpm/
+DerivedData/
+xcuserdata/
+*.xcresult
+*.log
+Package.resolved

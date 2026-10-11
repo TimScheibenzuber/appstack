@@ -1,0 +1,90 @@
+name: iOS Blitz
+
+on:
+  push:
+    paths:
+      - "ios/**"
+      - ".github/workflows/ios-blitz.yml"
+  pull_request:
+    paths:
+      - "ios/**"
+      - ".github/workflows/ios-blitz.yml"
+  workflow_dispatch:
+
+concurrency:
+  group: ios-blitz-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+jobs:
+  claudekit-linux:
+    name: ClaudeKit (Linux, Swift 6.1)
+    runs-on: ubuntu-latest
+    container: swift:6.1-noble
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+      - name: Install python3
+        run: apt-get update -qq && apt-get install -y -qq python3 > /dev/null
+      - name: Unit + integration tests
+        working-directory: ios/Blitz/ClaudeKit
+        run: scripts/integration-test.sh
+
+  ios:
+    name: iOS app (Xcode)
+    runs-on: macos-15
+    timeout-minutes: 40
+    steps:
+      - uses: actions/checkout@v4
+      - name: Toolchain
+        run: |
+          xcodebuild -version
+          swift --version
+      - name: ClaudeKit tests (macOS)
+        working-directory: ios/Blitz/ClaudeKit
+        run: scripts/integration-test.sh
+      - name: Pick simulator
+        id: sim
+        run: |
+          udid=$(xcrun simctl list devices available -j | python3 -c '
+          import json, sys
+          devices = json.load(sys.stdin)["devices"]
+          for runtime, entries in sorted(devices.items(), reverse=True):
+              if "iOS" not in runtime:
+                  continue
+              for device in entries:
+                  if device["name"].startswith("iPhone"):
+                      print(device["udid"]); sys.exit(0)
+          sys.exit(1)')
+          echo "udid=$udid" >> "$GITHUB_OUTPUT"
+      - name: Build and test app (Debug, simulator)
+        working-directory: ios/Blitz
+        run: |
+          set +e
+          xcodebuild test \
+            -project Blitz.xcodeproj -scheme Blitz \
+            -destination "id=${{ steps.sim.outputs.udid }}" \
+            CODE_SIGNING_ALLOWED=NO > build-test.log 2>&1
+          status=$?
+          grep -E "error:|warning:|Test Suite|Executed|✔|✘|\*\* " build-test.log | grep -v "^ld: warning" | tail -150
+          exit $status
+      - name: Build app (Release, device)
+        working-directory: ios/Blitz
+        run: |
+          set +e
+          xcodebuild build \
+            -project Blitz.xcodeproj -scheme Blitz -configuration Release \
+            -destination "generic/platform=iOS" \
+            CODE_SIGNING_ALLOWED=NO > build-release.log 2>&1
+          status=$?
+          grep -E "error:|warning:|\*\* " build-release.log | tail -100
+          exit $status
+      - name: Upload logs
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: xcodebuild-logs
+          path: ios/Blitz/*.log
+          if-no-files-found: ignore
