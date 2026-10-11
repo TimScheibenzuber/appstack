@@ -97,9 +97,15 @@ struct Item: Codable, Hashable, Identifiable {
         return line.isEmpty ? "Untitled" : String(line.prefix(80))
     }
 
+    /// One-line preview without markdown markers or transcript headings.
     var snippet: String {
-        let s = summary.isEmpty ? body : summary
-        return String(s.prefix(240)).replacingOccurrences(of: "\n", with: " ")
+        let source = summary.isEmpty ? String(body.prefix(400)) : summary
+        return source.split(separator: "\n")
+            .filter { !$0.hasPrefix("### ") }
+            .map { $0.trimmingCharacters(in: CharacterSet(charactersIn: "#>-* ")) }
+            .joined(separator: " ")
+            .replacingOccurrences(of: "**", with: "")
+            .replacingOccurrences(of: "__", with: "")
     }
 
     /// Text that represents the item for search and embeddings.

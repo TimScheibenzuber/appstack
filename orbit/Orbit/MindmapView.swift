@@ -1,6 +1,7 @@
 import SwiftUI
 
-/// Balanced horizontal tree: first-level branches alternate right and left, subtrees stack by leaf count.
+/// Balanced horizontal tree: first-level branches alternate right and left, subtrees stack by leaf count,
+/// and each level sits a fixed gap beyond its parent's estimated width.
 struct MindLayout {
     struct Link {
         let id: UUID
@@ -15,11 +16,17 @@ struct MindLayout {
     private(set) var branch: [UUID: Int] = [:]
     private(set) var links: [Link] = []
     private(set) var size = CGSize(width: 800, height: 500)
+    static let maxWidth: CGFloat = 200
 
     init(_ nodes: [MindNode]) {
         guard let root = nodes.first(where: { $0.parent == nil }) else { return }
         let children = Dictionary(grouping: nodes.filter { $0.parent != nil }, by: { $0.parent! }).mapValues { $0.map(\.id) }
-        let dx: CGFloat = 230, dy: CGFloat = 54
+        let dy: CGFloat = 54, gap: CGFloat = 44
+        let texts = Dictionary(nodes.map { ($0.id, $0.text) }, uniquingKeysWith: { a, _ in a })
+        func width(_ id: UUID, _ depth: Int) -> CGFloat {
+            let chars = CGFloat(max(texts[id]?.count ?? 0, 4))
+            return depth == 0 ? min(44 + chars * 10, 300) : min(28 + chars * (depth == 1 ? 8.2 : 7.4), MindLayout.maxWidth + 28)
+        }
         var leaves: [UUID: Int] = [:]
         func count(_ id: UUID) -> Int {
             let c = max(1, (children[id] ?? []).reduce(0) { $0 + count($1) })
@@ -29,13 +36,14 @@ struct MindLayout {
         _ = count(root.id)
 
         var pts: [UUID: CGPoint] = [root.id: .zero], dep: [UUID: Int] = [root.id: 0], br: [UUID: Int] = [:]
-        func place(_ id: UUID, _ d: Int, _ side: CGFloat, _ top: CGFloat, _ b: Int) {
-            pts[id] = CGPoint(x: side * CGFloat(d) * dx, y: top + CGFloat(leaves[id] ?? 1) * dy / 2)
+        func place(_ id: UUID, _ d: Int, _ side: CGFloat, _ top: CGFloat, _ b: Int, after edge: CGFloat) {
+            let w = width(id, d)
+            pts[id] = CGPoint(x: edge + side * w / 2, y: top + CGFloat(leaves[id] ?? 1) * dy / 2)
             dep[id] = d
             br[id] = b
             var y = top
             for c in children[id] ?? [] {
-                place(c, d + 1, side, y, b)
+                place(c, d + 1, side, y, b, after: edge + side * (w + gap))
                 y += CGFloat(leaves[c] ?? 1) * dy
             }
         }
@@ -44,14 +52,14 @@ struct MindLayout {
             let group = first.enumerated().filter { ($0.offset % 2 == 0) == (side > 0) }
             var y = -CGFloat(group.reduce(0) { $0 + (leaves[$1.element] ?? 1) }) * dy / 2
             for (i, c) in group {
-                place(c, 1, side, y, i)
+                place(c, 1, side, y, i, after: side * (width(root.id, 0) / 2 + gap))
                 y += CGFloat(leaves[c] ?? 1) * dy
             }
         }
 
         let xs = pts.values.map(\.x), ys = pts.values.map(\.y)
-        let minX = xs.min()! - 200, minY = ys.min()! - 80
-        size = CGSize(width: max(xs.max()! - minX + 200, 700), height: max(ys.max()! - minY + 80, 420))
+        let minX = xs.min()! - 180, minY = ys.min()! - 80
+        size = CGSize(width: max(xs.max()! - minX + 180, 700), height: max(ys.max()! - minY + 80, 420))
         let shifted = pts.mapValues { CGPoint(x: $0.x - minX, y: $0.y - minY) }
         points = shifted
         depth = dep
@@ -162,7 +170,7 @@ struct MindmapView: View {
                     .frame(minWidth: 80)
                     .fixedSize()
             } else {
-                Text(node.text.isEmpty ? "Idea" : node.text).lineLimit(2).frame(maxWidth: 220)
+                Text(node.text.isEmpty ? "Idea" : node.text).lineLimit(2).frame(maxWidth: MindLayout.maxWidth).fixedSize()
             }
         }
         .font(depth == 0 ? .title3.bold() : depth == 1 ? .headline : .callout)

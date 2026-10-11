@@ -31,9 +31,8 @@ struct ScreenshotTests {
 
         func shot(_ name: String, wait: Double = 1.6) async throws {
             try await Task.sleep(for: .seconds(wait))
-            guard let view = window.contentView, let rep = view.bitmapImageRepForCachingDisplay(in: view.bounds) else { return }
-            view.cacheDisplay(in: view.bounds, to: rep)
-            try rep.representation(using: .png, properties: [:])?.write(to: out.appending(path: name + ".png"))
+            guard let image = Self.capture(window) else { return }
+            try NSBitmapImageRep(cgImage: image).representation(using: .png, properties: [:])?.write(to: out.appending(path: name + ".png"))
         }
 
         let items = store.items.values
@@ -62,6 +61,19 @@ struct ScreenshotTests {
         store.showPalette = false
         store.lock(manual: true)
         try await shot("0-lock")
+    }
+
+    /// The composited window, including Liquid Glass and Metal layers that `cacheDisplay` can't draw.
+    /// `CGWindowListCreateImage` is hidden from the SDK but still captures the app's own windows.
+    static func capture(_ window: NSWindow) -> CGImage? {
+        typealias Capture = @convention(c) (CGRect, UInt32, UInt32, UInt32) -> Unmanaged<CGImage>?
+        if let symbol = dlsym(UnsafeMutableRawPointer(bitPattern: -2), "CGWindowListCreateImage") {
+            let capture = unsafeBitCast(symbol, to: Capture.self)
+            if let image = capture(.null, 1 << 3, UInt32(window.windowNumber), 1 | 1 << 3)?.takeRetainedValue() { return image }
+        }
+        guard let view = window.contentView, let rep = view.bitmapImageRepForCachingDisplay(in: view.bounds) else { return nil }
+        view.cacheDisplay(in: view.bounds, to: rep)
+        return rep.cgImage
     }
 }
 #endif
