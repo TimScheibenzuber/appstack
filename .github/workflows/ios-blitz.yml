@@ -42,9 +42,6 @@ jobs:
         run: |
           xcodebuild -version
           swift --version
-      - name: ClaudeKit tests (macOS)
-        working-directory: ios/Blitz/ClaudeKit
-        run: scripts/integration-test.sh
       - name: Pick simulator
         id: sim
         run: |
@@ -71,6 +68,7 @@ jobs:
           grep -E "error:|warning:|Test Suite|Executed|✔|✘|\*\* " build-test.log | grep -v "^ld: warning" | tail -150
           exit $status
       - name: Build app (Release, device)
+        if: always() && steps.sim.outcome == 'success'
         working-directory: ios/Blitz
         run: |
           set +e
@@ -81,6 +79,10 @@ jobs:
           status=$?
           grep -E "error:|warning:|\*\* " build-release.log | tail -100
           exit $status
+      - name: ClaudeKit tests (macOS)
+        if: always()
+        working-directory: ios/Blitz/ClaudeKit
+        run: scripts/integration-test.sh
       - name: Upload logs
         if: always()
         uses: actions/upload-artifact@v4

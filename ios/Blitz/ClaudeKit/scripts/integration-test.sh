@@ -5,15 +5,22 @@ set -euo pipefail
 cd "$(dirname "$0")/.."
 
 port_file="$(mktemp)"
-python3 scripts/mock_server.py > "$port_file" &
+log_file="$(mktemp)"
+python3 -u scripts/mock_server.py > "$port_file" 2> "$log_file" &
 server_pid=$!
-trap 'kill "$server_pid" 2>/dev/null || true; rm -f "$port_file"' EXIT
+trap 'kill "$server_pid" 2>/dev/null || true; rm -f "$port_file" "$log_file"' EXIT
 
-for _ in $(seq 1 50); do
+# First python3 start on a fresh CI machine can take a while.
+for _ in $(seq 1 600); do
   [[ -s "$port_file" ]] && break
+  kill -0 "$server_pid" 2>/dev/null || break
   sleep 0.1
 done
 port="$(head -n 1 "$port_file")"
-[[ -n "$port" ]] || { echo "mock server did not start" >&2; exit 1; }
+if [[ -z "$port" ]]; then
+  echo "mock server did not start" >&2
+  cat "$log_file" >&2
+  exit 1
+fi
 
 CLAUDEKIT_MOCK_PORT="$port" swift test "$@"
