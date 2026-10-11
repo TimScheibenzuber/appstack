@@ -109,8 +109,9 @@ final class Vault: Sendable {
     }
 
     func delete(_ id: UUID) {
-        try? FileManager.default.removeItem(at: url(for: id))
-        try? FileManager.default.removeItem(at: blobsDir.appending(path: id.uuidString))
+        for file in [url(for: id), blobsDir.appending(path: id.uuidString), thumbURL(id)] {
+            try? FileManager.default.removeItem(at: file)
+        }
     }
 
     /// Item ids with modification dates. Asks iCloud to download placeholders it finds.
@@ -144,6 +145,16 @@ final class Vault: Sendable {
     func storeBlob(from source: URL, id: UUID) throws {
         let data = try Data(contentsOf: source, options: .mappedIfSafe)
         try Self.coordinatedWrite(Self.seal(data, key), to: blobsDir.appending(path: id.uuidString))
+    }
+
+    private func thumbURL(_ id: UUID) -> URL { blobsDir.appending(path: id.uuidString + ".thumb") }
+
+    func storeThumb(_ data: Data, id: UUID) throws {
+        try Self.coordinatedWrite(Self.seal(data, key), to: thumbURL(id))
+    }
+
+    func thumb(_ id: UUID) -> Data? {
+        try? Self.unseal(Self.coordinatedRead(thumbURL(id)), key)
     }
 
     /// Decrypts a blob into a private temporary folder that is wiped on lock.
@@ -231,6 +242,12 @@ enum Keychain {
                                     kSecAttrAccount as String: account, kSecReturnData as String: true]
         var out: CFTypeRef?
         return SecItemCopyMatching(query as CFDictionary, &out) == errSecSuccess ? out as? Data : nil
+    }
+
+    static func has(_ account: String) -> Bool {
+        let query: [String: Any] = [kSecClass as String: kSecClassGenericPassword, kSecAttrService as String: service,
+                                    kSecAttrAccount as String: account, kSecReturnAttributes as String: true]
+        return SecItemCopyMatching(query as CFDictionary, nil) == errSecSuccess
     }
 
     static func delete(_ account: String) {

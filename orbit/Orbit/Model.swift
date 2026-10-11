@@ -63,7 +63,7 @@ struct FileRef: Codable, Hashable {
     var type: String        // UTType identifier
     var size: Int
     var text: String?       // extracted text, used for search and AI
-    var thumb: Data?        // small JPEG preview
+    var hasThumb = false    // encrypted JPEG preview in blobs/<id>.thumb
 }
 
 struct MindNode: Codable, Hashable, Identifiable {
@@ -129,7 +129,7 @@ struct Project: Codable, Hashable, Identifiable {
     var archived = false
 }
 
-struct Meta: Codable {
+struct Meta: Codable, Equatable {
     var spaces: [Space] = [
         Space(name: "Work", icon: "briefcase.fill", hue: 0.62),
         Space(name: "Personal", icon: "leaf.fill", hue: 0.38),
