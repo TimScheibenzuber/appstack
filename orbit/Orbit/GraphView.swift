@@ -87,7 +87,7 @@ final class GraphModel {
         }
         let n = nodes.count
         var force = [SIMD2<Double>](repeating: .zero, count: n)
-        let charge = nodes.map { $0.role == .space ? 320.0 : $0.role == .project ? 160 : 45 }
+        let charge = nodes.map { $0.role == .space ? 480.0 : $0.role == .project ? 240 : 90 }
         for i in 0..<n {
             for j in (i + 1)..<n {
                 var d = pos[i] - pos[j]
@@ -103,7 +103,7 @@ final class GraphModel {
             let length = max((d * d).sum().squareRoot(), 0.01)
             let hub = nodes[e.a].role != .item && nodes[e.b].role != .item
             let (rest, strength): (Double, Double) = switch e.link {
-            case .tree: hub ? (150, 0.35) : (60, 0.45)
+            case .tree: hub ? (170, 0.35) : (80, 0.45)
             case .explicit: (90, 0.3)
             case .semantic: (120, 0.08)
             }
@@ -275,8 +275,10 @@ struct GraphView: View {
             }
             let showLabel = node.role != .item || m.nodes.count <= 40 || scale > 1.4 || (lit?.contains(i) ?? false)
             if showLabel && !faded {
-                let font: Font = node.role == .space ? .headline : node.role == .project ? .subheadline.weight(.medium) : .caption
-                context.draw(Text(label(node)).font(font).foregroundStyle(.primary), at: CGPoint(x: p.x, y: p.y + r + 4), anchor: .top)
+                let text = node.role == .item
+                    ? Text(label(node)).font(.caption).foregroundStyle(.secondary)
+                    : Text(label(node)).font(node.role == .space ? .headline : .subheadline.weight(.medium)).foregroundStyle(.primary)
+                context.draw(text, at: CGPoint(x: p.x, y: p.y + r + 4), anchor: .top)
             }
         }
     }
@@ -333,7 +335,7 @@ struct GraphView: View {
             Label("Item", systemImage: "circle.fill").imageScale(.small)
             Label("Link", systemImage: "line.diagonal").foregroundStyle(.tint)
             if semantic { Label("Similar", systemImage: "line.diagonal").foregroundStyle(.purple) }
-            Text("\(model.nodes.count) nodes").foregroundStyle(.secondary).monospacedDigit()
+            Text("\(min(store.visible.count, cap)) items").foregroundStyle(.secondary).monospacedDigit()
         }
         .font(.caption)
         .padding(.horizontal, 14)

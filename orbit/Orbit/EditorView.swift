@@ -59,6 +59,8 @@ struct EditorView: View {
             TextField("Title", text: item.title, axis: .vertical)
                 .font(wide ? .largeTitle.bold() : .title2.bold())
                 .textFieldStyle(.plain)
+                .lineLimit(1...4)
+                .fixedSize(horizontal: false, vertical: true)
 
             Button { Task { await store.enrich(id) } } label: {
                 if store.isWorking(id) { ProgressView().controlSize(.small) } else { Image(systemName: "wand.and.sparkles") }
