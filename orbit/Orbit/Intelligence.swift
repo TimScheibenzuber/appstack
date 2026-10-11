@@ -86,6 +86,25 @@ final class Brain {
         return Array(nearest(v, limit: limit + 1, minScore: minScore).filter { $0.id != id }.prefix(limit))
     }
 
+    /// Each item's k most similar neighbours within the given set, as unique pairs.
+    func pairs(among ids: [UUID], k: Int, minScore: Float) -> [(UUID, UUID)] {
+        let entries = ids.compactMap { id in vectors[id].map { (id, $0) } }
+        var seen = Set<[UUID]>()
+        var out: [(UUID, UUID)] = []
+        for (i, a) in entries.enumerated() {
+            var hits: [(Int, Float)] = []
+            for (j, b) in entries.enumerated() where j != i && a.1.lang == b.1.lang {
+                let score = vDSP.dot(a.1.values, b.1.values)
+                if score >= minScore { hits.append((j, score)) }
+            }
+            for (j, _) in hits.sorted(by: { $0.1 > $1.1 }).prefix(k) {
+                let pair = [a.0, entries[j].0].sorted { $0.uuidString < $1.uuidString }
+                if seen.insert(pair).inserted { out.append((pair[0], pair[1])) }
+            }
+        }
+        return out
+    }
+
     func search(_ text: String) async -> [(id: UUID, score: Float)] {
         guard let v = await embedder.embed(text) else { return [] }
         return nearest(v, limit: 12, minScore: 0.3)
@@ -119,6 +138,12 @@ struct Triage {
     var tags: [String]
 }
 
+@Generable
+struct Ideas {
+    @Guide(description: "Three to five distinct, concrete sub-ideas of at most six words each")
+    var ideas: [String]
+}
+
 /// Apple Intelligence (on-device Foundation Models) with a NaturalLanguage fallback. Nothing leaves the device.
 enum AI {
     static var isAvailable: Bool { SystemLanguageModel.default.isAvailable }
@@ -137,6 +162,15 @@ enum AI {
             """)
         let prompt = "Question:\n\(question.prefix(1500))\n\nNotes:\n\(context.prefix(2500))"
         return try await session.respond(to: prompt).content
+    }
+
+    /// Sub-ideas for the last node of a mindmap path ("Root › Branch › Node").
+    static func ideas(path: [String]) async throws -> [String] {
+        let session = LanguageModelSession(instructions: """
+            You help brainstorm mind maps. Suggest concise, concrete sub-ideas that don't repeat the path. \
+            Use the language of the mind map.
+            """)
+        return try await session.respond(to: "Mind map path: " + path.joined(separator: " › "), generating: Ideas.self).content.ideas
     }
 
     /// Fallback tags: the most frequent nouns and names.

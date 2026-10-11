@@ -118,8 +118,7 @@ struct Space: Codable, Hashable, Identifiable {
     var id = UUID()
     var name: String
     var icon: String
-    var hue: Double
-    var color: Color { Color(hue: hue, saturation: 0.62, brightness: 0.92) }
+    var tone: Int           // slot in Palette
 }
 
 struct Project: Codable, Hashable, Identifiable {
@@ -131,8 +130,8 @@ struct Project: Codable, Hashable, Identifiable {
 
 struct Meta: Codable, Equatable {
     var spaces: [Space] = [
-        Space(name: "Work", icon: "briefcase.fill", hue: 0.62),
-        Space(name: "Personal", icon: "leaf.fill", hue: 0.38),
+        Space(name: "Work", icon: "briefcase.fill", tone: 0),
+        Space(name: "Personal", icon: "leaf.fill", tone: 2),
     ]
     var projects: [Project] = []
 }

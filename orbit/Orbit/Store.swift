@@ -31,7 +31,9 @@ final class Store {
     var kindFilter: Kind?
     var query = ""
     var showPalette = false
+    var showImporter = false
     private(set) var notice: String?
+    private(set) var manualLock = false
     private(set) var working: Set<UUID> = []
 
     @ObservationIgnored private var pending: Set<UUID> = []
@@ -89,14 +91,16 @@ final class Store {
 
     private func attach(_ vault: Vault) async {
         if Pref.on(Pref.biometric) { Keychain.set(vault.keyData, for: vault.id.uuidString) }
+        manualLock = false
         meta = (try? vault.loadMeta()) ?? Meta()
         self.vault = vault
         await sync()
         watch(vault)
     }
 
-    func lock() {
+    func lock(manual: Bool = false) {
         guard let vault else { return }
+        manualLock = manual
         saveTask?.cancel()
         for id in pending {
             if let item = items[id] { try? vault.save(item) } else { vault.delete(id) }
@@ -238,6 +242,19 @@ final class Store {
         return item
     }
 
+    /// Quick capture into the inbox without changing what the window shows.
+    func capture(_ text: String, kind: Kind) {
+        var item = Item(kind: kind, body: text)
+        if kind == .question {
+            item.status = .open
+            item.title = String(text.prefix { $0 != "\n" }.prefix(120))
+        }
+        items[item.id] = item
+        markDirty(item.id)
+        notify("Captured to Inbox")
+        if Pref.on(Pref.autoEnrich) && AI.isAvailable { Task { await enrich(item.id, quiet: true) } }
+    }
+
     func binding(_ id: UUID) -> Binding<Item> {
         Binding(get: { self.items[id] ?? Item(id: id) }, set: { self.update($0) })
     }
@@ -319,8 +336,9 @@ final class Store {
     // MARK: Spaces & projects
 
     func addSpace(_ name: String) {
-        let palette = [0.62, 0.38, 0.08, 0.83, 0.52, 0.0, 0.16, 0.72]
-        meta.spaces.append(Space(name: name, icon: "circle.fill", hue: palette[meta.spaces.count % palette.count]))
+        let used = Set(meta.spaces.map(\.tone))
+        let tone = (0..<Palette.count).first { !used.contains($0) } ?? meta.spaces.count % Palette.count
+        meta.spaces.append(Space(name: name, icon: "circle.fill", tone: tone))
         saveMeta()
     }
 
