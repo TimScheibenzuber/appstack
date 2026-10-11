@@ -17,11 +17,11 @@ actor ConversationStore {
 
     init(directory: URL) {
         self.directory = directory
+        // Default date strategy (seconds as Double) round-trips exactly; ISO 8601 would drop
+        // sub-second precision and make ordering of quick successive saves unstable.
         let encoder = JSONEncoder()
         encoder.outputFormatting = [.sortedKeys]
-        encoder.dateEncodingStrategy = .iso8601
         self.encoder = encoder
-        decoder.dateDecodingStrategy = .iso8601
     }
 
     static func defaultDirectory() -> URL {
