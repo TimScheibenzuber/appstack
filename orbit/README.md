@@ -4,7 +4,16 @@ A native, encrypted second brain for Mac, iPhone and iPad. Orbit keeps your
 important generated files, notes, open questions and AI chats in one vault,
 sorts them with on-device intelligence and shows how everything connects.
 
-Swift + SwiftUI, no dependencies, ~3,700 lines. MacBook first.
+Swift + SwiftUI, no dependencies, ~3,900 lines. MacBook first.
+
+| | |
+|---|---|
+| ![Overview](docs/screenshots/1-overview.png) | ![Graph](docs/screenshots/4-graph.png) |
+| ![List and inspector](docs/screenshots/2-list.png) | ![Mindmap](docs/screenshots/6-mindmap.png) |
+| ![Command palette](docs/screenshots/7-palette.png) | ![Lock screen](docs/screenshots/0-lock.png) |
+
+Screenshots are rendered by CI from the real app with sample content
+(Actions → Orbit → *Run workflow* → *screenshots*).
 
 ## Features
 
@@ -46,7 +55,7 @@ First launch asks you to create a vault:
 
 | Keys | Action |
 |---|---|
-| ⌘K | Command palette (search + commands) |
+| ⌘K | Command palette (search + commands, incl. *Add Sample Content*) |
 | ⌘N / ⇧⌘N / ⌥⌘N | New note / question / mindmap |
 | ⇧⌘I | Import files or chat exports |
 | ⌘1 / ⌘2 / ⌘3 | List / Board / Graph |
@@ -103,6 +112,9 @@ and lazy thumbnail decryption with an in-memory cache.
 
 ## Tests
 
-`OrbitTests` covers encryption round trips, wrong keys, passphrase change, blob
-export, Claude/ChatGPT import, transcript parsing and the mindmap layout.
-CI (`.github/workflows/orbit.yml`) runs them on macOS and builds for iOS.
+`OrbitTests` (11 Swift Testing tests) covers encryption round trips, wrong keys,
+refusing to overwrite a vault, passphrase change, blob export, Claude/ChatGPT
+import, transcript parsing and the mindmap layout. CI
+(`.github/workflows/orbit.yml`) runs them on macOS and builds for iOS.
+
+To try the views quickly: ⌘K → **Add Sample Content**.
