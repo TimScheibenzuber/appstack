@@ -6,6 +6,11 @@ on:
   pull_request:
     paths: ["orbit/**", ".github/workflows/orbit.yml"]
   workflow_dispatch:
+    inputs:
+      screenshots:
+        description: Commit fresh screenshots to orbit/docs/screenshots
+        type: boolean
+        default: false
 
 concurrency:
   group: orbit-${{ github.ref }}
@@ -14,6 +19,8 @@ concurrency:
 jobs:
   build:
     runs-on: macos-26
+    permissions:
+      contents: write
     timeout-minutes: 40
     defaults:
       run:
@@ -39,3 +46,13 @@ jobs:
       - name: Build (iOS Simulator)
         if: always()
         run: xcodebuild build -project Orbit.xcodeproj -scheme Orbit -destination 'generic/platform=iOS Simulator' CODE_SIGNING_ALLOWED=NO -quiet
+      - name: Commit screenshots
+        if: github.event_name == 'workflow_dispatch' && inputs.screenshots
+        run: |
+          mkdir -p docs/screenshots
+          for f in "$RUNNER_TEMP"/shots/*.png; do sips -Z 1600 "$f" --out "docs/screenshots/$(basename "$f")" >/dev/null; done
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add docs/screenshots
+          git commit -m "Orbit: update screenshots [skip ci]" || exit 0
+          git push
