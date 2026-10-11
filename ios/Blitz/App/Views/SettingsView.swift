@@ -65,7 +65,7 @@ struct SettingsView: View {
                 Section("Stabilität & Sicherheit") {
                     InfoRow(icon: "arrow.triangle.2.circlepath", text: "Automatische Wiederholung bei Überlastung, Rate-Limits und Netzabbrüchen")
                     InfoRow(icon: "wifi.exclamationmark", text: "Wartet auf das Netz statt abzubrechen")
-                    InfoRow(icon: "shield.lefthalf.filled", text: "Opus und Sonnet: abgelehnte Anfragen laufen automatisch über das empfohlene Fallback-Modell")
+                    InfoRow(icon: "shield.lefthalf.filled", text: "Opus und Sonnet: abgelehnte Anfragen können serverseitig automatisch über ein Fallback-Modell laufen")
                     InfoRow(icon: "lock.fill", text: "Chats verschlüsselt gespeichert, App-Vorschau im App-Umschalter verborgen")
                 }
             }

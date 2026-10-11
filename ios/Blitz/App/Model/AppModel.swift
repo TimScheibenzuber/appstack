@@ -169,6 +169,7 @@ final class AppModel: ChatHost {
         chats[conversation.id] = ChatViewModel(conversation: conversation, host: self)
         lastAccess[conversation.id] = .now
         selectedID = conversation.id
+        evictIdleChats(keeping: conversation.id)
         return conversation.id
     }
 

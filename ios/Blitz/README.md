@@ -29,9 +29,9 @@ Neue Dateien hinzugefügt? Projekt neu erzeugen: `brew install xcodegen && xcode
 
 - Wiederholung mit Backoff + Jitter bei 429/5xx/529, Netzfehlern und abgebrochenen Streams; `retry-after` wird beachtet.
 - Bricht ein Stream mitten in der Antwort ab, wird die Anfrage einmal automatisch neu gestartet.
-- Offline: wartet auf das Netz (NWPathMonitor), statt sofort zu scheitern.
+- Offline: wartet bis zu 30 s auf das Netz (NWPathMonitor); scheitert eine Nachricht offline, wird sie beim Wiederverbinden automatisch erneut gesendet – aber nur, solange sie der letzte Stand des Chats ist.
 - Lehnt die API ein optionales Feature ab (z. B. Fast Mode nicht freigeschaltet), wird es automatisch abgeschaltet und die Nachricht trotzdem gesendet.
-- Sicherheits-Ablehnungen laufen serverseitig über das empfohlene Fallback-Modell (`fallbacks: "default"`).
+- Sicherheits-Ablehnungen können bei Opus und Sonnet serverseitig über ein Fallback-Modell laufen (`fallbacks: "default"`, je nach Ablehnungskategorie); nennt die API ein Ausweichmodell, bietet die App einen Ein-Tipp-Neuversuch an.
 - Signatur-Konflikte bei Thinking-Blöcken werden durch einmaliges Neusenden ohne Thinking behoben.
 - Antworten laufen im Hintergrund weiter (Background Task), Chats bleiben beim Wechsel aktiv.
 - Atomare Speicherung; beschädigte Dateien werden beiseitegelegt statt die App abstürzen zu lassen.

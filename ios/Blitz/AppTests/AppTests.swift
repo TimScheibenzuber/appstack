@@ -86,8 +86,10 @@ final class FakeHost: ChatHost {
 
 @MainActor
 struct ChatViewModelTests {
+    /// Deadline-based so a slow simulator cannot turn a pass into a flake.
     private func waitUntilIdle(_ chat: ChatViewModel) async {
-        for _ in 0..<400 where chat.isBusy {
+        let deadline = ContinuousClock.now + .seconds(30)
+        while chat.isBusy, ContinuousClock.now < deadline {
             try? await Task.sleep(for: .milliseconds(5))
         }
     }
@@ -195,7 +197,8 @@ struct ChatViewModelTests {
         let chat = ChatViewModel(conversation: Conversation(systemPrompt: nil), host: host)
         chat.draft = "Hi"
         chat.send()
-        for _ in 0..<200 where chat.live.text.isEmpty {
+        let deadline = ContinuousClock.now + .seconds(30)
+        while chat.live.text.isEmpty, ContinuousClock.now < deadline {
             try? await Task.sleep(for: .milliseconds(5))
         }
         #expect(chat.live.tailBlocks == [.paragraph("Teil")])
@@ -318,9 +321,8 @@ struct AppModelTests {
     }
 
     private func waitFor(_ condition: () async -> Bool) async throws {
-        var attempts = 0
-        while await !condition(), attempts < 400 {
-            attempts += 1
+        let deadline = ContinuousClock.now + .seconds(30)
+        while await !condition(), ContinuousClock.now < deadline {
             try await Task.sleep(for: .milliseconds(5))
         }
     }
@@ -344,6 +346,15 @@ struct AppModelTests {
         try await waitFor { await store.summaries().isEmpty }
         #expect(await store.summaries().isEmpty)
         #expect(model.summaries.isEmpty)
+    }
+
+    @Test func newConversationsAreEvictedToo() {
+        let (model, _) = makeModel()
+        for _ in 0..<20 {
+            let id = model.newConversation()
+            model.selectedID = nil // leave the empty chat behind
+        }
+        #expect(model.cachedChatCount <= 9)
     }
 
     @Test func evictsLeastRecentlyUsedButKeepsDrafts() async throws {

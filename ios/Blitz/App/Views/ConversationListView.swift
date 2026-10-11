@@ -9,7 +9,7 @@ struct ConversationListView: View {
         @Bindable var model = model
         List(selection: $model.selectedID) {
             if !model.isOnline {
-                Label("Offline – fehlgeschlagene Nachrichten werden automatisch erneut gesendet, sobald das Netz zurück ist", systemImage: "wifi.slash")
+                Label("Offline. Was jetzt fehlschlägt, wird beim Wiederverbinden automatisch erneut gesendet.", systemImage: "wifi.slash")
                     .font(.footnote)
                     .foregroundStyle(.secondary)
             }
