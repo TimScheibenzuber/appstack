@@ -1,0 +1,29 @@
+name: Orbit
+
+on:
+  push:
+    paths: ["orbit/**", ".github/workflows/orbit.yml"]
+  pull_request:
+    paths: ["orbit/**", ".github/workflows/orbit.yml"]
+  workflow_dispatch:
+
+concurrency:
+  group: orbit-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  build:
+    runs-on: macos-26
+    timeout-minutes: 40
+    defaults:
+      run:
+        working-directory: orbit
+    steps:
+      - uses: actions/checkout@v5
+      - name: Toolchain
+        run: xcodebuild -version && swift --version
+      - name: Test (macOS)
+        run: xcodebuild test -project Orbit.xcodeproj -scheme Orbit -destination 'platform=macOS' CODE_SIGNING_ALLOWED=NO -quiet
+      - name: Build (iOS Simulator)
+        if: always()
+        run: xcodebuild build -project Orbit.xcodeproj -scheme Orbit -destination 'generic/platform=iOS Simulator' CODE_SIGNING_ALLOWED=NO -quiet

@@ -11,3 +11,9 @@
 
 # --- macOS Systemdateien ---
 .DS_Store
+
+# --- Xcode ---
+xcuserdata/
+DerivedData/
+build/
+*.xcresult
