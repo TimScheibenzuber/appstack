@@ -7,7 +7,7 @@ struct MarkdownView: View {
     let text: String
 
     var body: some View {
-        MarkdownBlocksView(stable: MarkdownBlockSplitter.blocks(of: text), tail: [])
+        MarkdownBlocksView(stable: MarkdownCache.blocks(text), tail: [])
     }
 }
 
@@ -59,6 +59,16 @@ enum MarkdownCache {
     private static var entries: [String: (value: AttributedString, lastUse: UInt64)] = [:]
     private static var clock: UInt64 = 0
     private static let capacity = 400
+    private static var splits: [String: [MarkdownBlock]] = [:]
+
+    /// Block split of a finished message (re-rendering a row never rescans its text).
+    static func blocks(_ text: String) -> [MarkdownBlock] {
+        if let hit = splits[text] { return hit }
+        let blocks = MarkdownBlockSplitter.blocks(of: text)
+        if splits.count >= 128 { splits.removeAll(keepingCapacity: true) }
+        splits[text] = blocks
+        return blocks
+    }
 
     static func attributed(_ prose: String) -> AttributedString {
         clock &+= 1

@@ -2,7 +2,7 @@ import ClaudeKit
 import SwiftUI
 import UIKit
 
-struct MessageRow: View {
+struct MessageRow: View, Equatable {
     let message: ChatMessage
     /// Set only for the turn that is currently streaming.
     let live: LiveReply?
@@ -11,6 +11,15 @@ struct MessageRow: View {
     /// Called whenever the live reply grows (drives auto-scroll without making the whole
     /// chat view depend on the streaming text).
     var onLiveGrowth: () -> Void = {}
+
+    /// Lets SwiftUI skip re-rendering finished rows when the chat view updates. The growth
+    /// callback is deliberately not compared; state read from `chat` is tracked by Observation.
+    nonisolated static func == (lhs: MessageRow, rhs: MessageRow) -> Bool {
+        lhs.message == rhs.message
+            && lhs.isLastAssistant == rhs.isLastAssistant
+            && lhs.live === rhs.live
+            && lhs.chat === rhs.chat
+    }
 
     var body: some View {
         switch message.role {

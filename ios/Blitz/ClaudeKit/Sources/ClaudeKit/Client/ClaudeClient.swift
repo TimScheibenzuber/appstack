@@ -225,7 +225,9 @@ public actor ClaudeClient {
                 let attempt = retries + restarts
 
                 let delay: Duration
-                if failure.isConnectivityLoss, let connectivity {
+                // Wait for the network only if the OS says it is down; errors such as
+                // "cannot find host" on a working path get normal exponential backoff.
+                if failure.isConnectivityLoss, let connectivity, !connectivity.isConnected {
                     emit(.waitingForConnectivity)
                     guard await connectivity.waitUntilConnected(timeout: policy.connectivityTimeout) else { throw failure }
                     delay = .milliseconds(100)

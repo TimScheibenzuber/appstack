@@ -12,7 +12,7 @@ actor ConversationStore {
 
     private let directory: URL
     private let encoder: JSONEncoder
-    private let decoder = JSONDecoder()
+    private let decoder: JSONDecoder
     private var index: [UUID: ConversationSummary]?
 
     init(directory: URL) {
@@ -22,6 +22,16 @@ actor ConversationStore {
         let encoder = JSONEncoder()
         encoder.outputFormatting = [.sortedKeys]
         self.encoder = encoder
+        let decoder = JSONDecoder()
+        // Also accepts ISO 8601 strings written by earlier development builds.
+        decoder.dateDecodingStrategy = .custom { decoder in
+            let container = try decoder.singleValueContainer()
+            if let seconds = try? container.decode(Double.self) {
+                return Date(timeIntervalSinceReferenceDate: seconds)
+            }
+            return try Date(container.decode(String.self), strategy: .iso8601)
+        }
+        self.decoder = decoder
     }
 
     static func defaultDirectory() -> URL {

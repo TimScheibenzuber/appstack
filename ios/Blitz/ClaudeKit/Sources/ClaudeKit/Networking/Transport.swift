@@ -29,6 +29,8 @@ public protocol StreamingTransport: Sendable {
 
 /// Lets the client wait for a usable network path instead of burning retries while offline.
 public protocol ConnectivityMonitoring: Sendable {
+    /// Whether the system currently reports a usable network path.
+    var isConnected: Bool { get }
     /// Returns `true` once a satisfied path exists, `false` on timeout.
     func waitUntilConnected(timeout: Duration) async -> Bool
 }

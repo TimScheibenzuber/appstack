@@ -23,6 +23,7 @@ struct ChatView: View {
                                 if isPinnedToBottom { proxy.scrollTo(Self.bottomID, anchor: .bottom) }
                             }
                         )
+                        .equatable()
                         .id(message.id)
                     }
                     Color.clear

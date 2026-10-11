@@ -7,6 +7,7 @@ import os
 protocol ChatHost: AnyObject {
     var client: ClaudeClient { get }
     var settings: AppSettings { get }
+    var isOnline: Bool { get }
     func persist(_ conversation: Conversation)
 }
 
@@ -96,7 +97,8 @@ final class ChatViewModel: Identifiable {
     @ObservationIgnored private var pendingText = ""
     @ObservationIgnored private var pendingThinking = ""
     @ObservationIgnored private var flushScheduled = false
-    /// The last turn failed for lack of network; it is re-sent once the network returns.
+    /// The last turn failed while the device was offline; it is re-sent once the network
+    /// returns - but only if that failed turn is still the last thing in the conversation.
     @ObservationIgnored private(set) var awaitsNetwork = false
 
     init(conversation: Conversation, host: any ChatHost) {
@@ -163,9 +165,13 @@ final class ChatViewModel: Identifiable {
         startTurn(modelID: modelID)
     }
 
-    /// Called when connectivity returns.
+    /// Called when connectivity returns. Never touches a conversation the user has moved on
+    /// in: only a failed last turn is retried.
     func networkRestored() {
         guard awaitsNetwork, !isBusy else { return }
+        awaitsNetwork = false
+        guard let last = conversation.messages.last, last.role == .assistant,
+              case .failed = last.status else { return }
         regenerate()
     }
 
@@ -177,6 +183,7 @@ final class ChatViewModel: Identifiable {
         draft = conversation.messages[index].text
         conversation.messages.removeSubrange(index...)
         banner = nil
+        awaitsNetwork = false
         persistNow()
     }
 
@@ -198,6 +205,7 @@ final class ChatViewModel: Identifiable {
 
     private func startTurn(modelID: String? = nil) {
         guard let host else { return }
+        awaitsNetwork = false
         let settings = host.settings
         let model = modelID.map(ModelCatalog.info(for:)) ?? settings.model
         let history = conversation.apiMessages()
@@ -372,7 +380,9 @@ final class ChatViewModel: Identifiable {
         conversation.messages[index].status = .failed(message: presentation.message)
         // A broken partial reply is shown but not replayed as if it were Claude's answer.
         conversation.messages[index].excludedFromContext = true
-        awaitsNetwork = presentation.isConnectivityLoss
+        // Promise an automatic resend only when the OS reports the device offline (then a
+        // reconnect event will follow); other network errors get a manual retry.
+        awaitsNetwork = presentation.isConnectivityLoss && host?.isOnline == false
         let text = awaitsNetwork
             ? "\(presentation.message) Wird automatisch erneut gesendet, sobald das Netz zurück ist."
             : presentation.message

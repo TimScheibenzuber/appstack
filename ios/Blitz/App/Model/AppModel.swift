@@ -40,6 +40,7 @@ final class AppModel: ChatHost {
     @ObservationIgnored private let store: ConversationStore
     @ObservationIgnored private let network: NetworkMonitor
     @ObservationIgnored private var chats: [UUID: ChatViewModel] = [:]
+    @ObservationIgnored private var lastAccess: [UUID: ContinuousClock.Instant] = [:]
     @ObservationIgnored private var didStart = false
     /// Storage operations run strictly in submission order (a later save never loses
     /// against an earlier one).
@@ -117,8 +118,11 @@ final class AppModel: ChatHost {
     // MARK: - Conversations
 
     func chat(for id: UUID) -> ChatViewModel? {
-        chats[id]
+        if chats[id] != nil { lastAccess[id] = .now }
+        return chats[id]
     }
+
+    var cachedChatCount: Int { chats.count }
 
     /// Loads (once) and returns the view model for a conversation. View models are cached so
     /// a reply keeps streaming while the user looks at another conversation.
@@ -131,21 +135,27 @@ final class AppModel: ChatHost {
         if let existing = chats[id] { return existing }
         let chat = ChatViewModel(conversation: conversation, host: self)
         chats[id] = chat
+        lastAccess[id] = .now
         evictIdleChats(keeping: id)
         return chat
     }
 
-    /// Bounds memory: idle conversations that are not on screen are dropped from the cache
-    /// (they are on disk); chats that are still streaming are always kept.
+    /// Bounds memory: the least recently used idle conversations are dropped from the cache
+    /// (they are on disk). Chats that stream, wait for the network, are on screen or hold
+    /// unsent text are always kept.
     private func evictIdleChats(keeping id: UUID) {
         let limit = 8
         guard chats.count > limit else { return }
-        let evictable = chats.values.filter {
-            $0.id != id && $0.id != selectedID && !$0.isBusy && !$0.awaitsNetwork
-        }
+        let evictable = chats.values
+            .filter {
+                $0.id != id && $0.id != selectedID && !$0.isBusy && !$0.awaitsNetwork
+                    && $0.draft.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+            }
+            .sorted { (lastAccess[$0.id] ?? .now) < (lastAccess[$1.id] ?? .now) }
         // Every state change is already saved, so dropping the cached model loses nothing.
         for chat in evictable.prefix(chats.count - limit) {
             chats[chat.id] = nil
+            lastAccess[chat.id] = nil
         }
     }
 
@@ -157,6 +167,7 @@ final class AppModel: ChatHost {
         let prompt = settings.systemPrompt.trimmingCharacters(in: .whitespacesAndNewlines)
         let conversation = Conversation(systemPrompt: prompt.isEmpty ? nil : prompt)
         chats[conversation.id] = ChatViewModel(conversation: conversation, host: self)
+        lastAccess[conversation.id] = .now
         selectedID = conversation.id
         return conversation.id
     }
@@ -165,6 +176,7 @@ final class AppModel: ChatHost {
         for id in ids {
             chats[id]?.stop()
             chats[id] = nil
+            lastAccess[id] = nil
             summaries.removeAll { $0.id == id }
             if selectedID == id { selectedID = nil }
         }

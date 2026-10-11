@@ -80,9 +80,16 @@ final class SleepRecorder: @unchecked Sendable {
     }
 }
 
+/// Reports the path as down; waiting "restores" it if `result` is true.
 struct ImmediateConnectivity: ConnectivityMonitoring {
     let result: Bool
+    var isConnected: Bool { false }
     func waitUntilConnected(timeout: Duration) async -> Bool { result }
+}
+
+struct OnlineConnectivity: ConnectivityMonitoring {
+    var isConnected: Bool { true }
+    func waitUntilConnected(timeout: Duration) async -> Bool { true }
 }
 
 struct ClaudeClientTests {
@@ -289,6 +296,15 @@ struct ClaudeClientTests {
         let (_, offlineError) = await collect(makeClient(offline, connectivity: ImmediateConnectivity(result: false)), request)
         #expect((offlineError as? ClaudeError)?.isConnectivityLoss == true)
         #expect(offline.requests.count == 1)
+    }
+
+    @Test func connectivityErrorsOnAWorkingPathBackOffNormally() async throws {
+        let sleeper = SleepRecorder()
+        let transport = MockTransport([[.fail(-1003)], [.fail(-1003)], [.head(200), .body(SSE.fullResponse())]])
+        let (updates, error) = await collect(makeClient(transport, sleeper: sleeper, connectivity: OnlineConnectivity()), request)
+        #expect(error == nil)
+        #expect(!updates.contains(.waitingForConnectivity))
+        #expect(sleeper.recorded == [.milliseconds(300), .milliseconds(600)])
     }
 
     @Test func missingKeyFailsWithoutNetwork() async throws {
