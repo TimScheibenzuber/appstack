@@ -1,0 +1,17 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>SplitView frame-busting page</title>
+</head>
+<body>
+  <h1>Frame-busting page: script-based embedding block</h1>
+  <p>This page sends no blocking header. A script breaks out of any frame by navigating the top window to itself.</p>
+  <script>
+    if (window.top !== window.self) {
+      window.top.location = window.self.location;
+    }
+  </script>
+</body>
+</html>

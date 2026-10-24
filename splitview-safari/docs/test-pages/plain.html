@@ -1,0 +1,17 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>SplitView control page</title>
+</head>
+<body>
+  <h1>Control page: no framing restrictions</h1>
+  <p>This page sends no X-Frame-Options or Content-Security-Policy header and runs no frame-busting script.</p>
+  <p id="state"></p>
+  <script>
+    document.getElementById('state').textContent =
+      window.top === window.self ? 'Loaded as top-level page.' : 'Loaded inside a frame.';
+  </script>
+</body>
+</html>
