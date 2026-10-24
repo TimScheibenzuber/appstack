@@ -1,0 +1,34 @@
+# macOS
+.DS_Store
+.AppleDouble
+.LSOverride
+._*
+
+# Xcode
+xcode/**/xcuserdata/
+xcode/**/*.xcuserstate
+xcode/**/*.xcscmblueprint
+xcode/**/project.xcworkspace/xcuserdata/
+xcode/**/DerivedData/
+xcode/**/build/
+*.hmap
+*.ipa
+*.dSYM.zip
+*.dSYM
+*.mobileprovision
+*.p12
+*.cer
+
+# Local signing values (team ID, bundle prefix); see docs/STATUS.md
+xcode/Local.xcconfig
+
+# Node
+node_modules/
+npm-debug.log*
+.npm/
+*.tgz
+
+# Editors
+.idea/
+.vscode/
+*.swp
